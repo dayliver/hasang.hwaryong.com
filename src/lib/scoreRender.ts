@@ -93,14 +93,37 @@ export function buildVerovioOptions(
   breaks: 'none' | 'line' = 'none',
   inputFrom: 'xml' | 'mei' = 'xml',
   paginate = false,
+  extras?: { hasTitle?: boolean },
 ) {
   const lyricsScale = clampLyricsScale(style?.lyricsScale)
+  const systemsPerPage = clampSystemsPerPage(style?.systemsPerPage)
+  const twoSystemPage = paginate && systemsPerPage <= 2
+  // 제목 없이 두 줄만 있을 때 세로를 더 펼쳐 화면을 고루 씀
+  const looseNoTitle = twoSystemPage && extras?.hasTitle === false
+
   return {
     inputFrom,
     scale: compact ? 36 : 42,
     pageWidth: compact ? 1400 : 2000,
-    adjustPageHeight: true,
+    // 여러 시스템을 페이지에 넣을 때는 고정 높이에 세로 정렬
+    adjustPageHeight: !paginate,
     adjustPageWidth: false,
+    justifyVertically: paginate,
+    pageHeight: paginate
+      ? compact
+        ? looseNoTitle
+          ? 1250
+          : twoSystemPage
+            ? 1120
+            : 1300
+        : looseNoTitle
+          ? 1750
+          : twoSystemPage
+            ? 1550
+            : 1800
+      : compact
+        ? 1000
+        : 1500,
     breaks,
     footer: 'none' as const,
     header: 'auto' as const,
@@ -108,10 +131,31 @@ export function buildVerovioOptions(
     svgViewBox: true,
     spacingNonLinear: clampSpacingNonLinear(style?.spacingNonLinear),
     spacingLinear: clampSpacingLinear(style?.spacingLinear),
-    systemMaxPerPage: paginate ? clampSystemsPerPage(style?.systemsPerPage) : 0,
+    systemMaxPerPage: paginate ? systemsPerPage : 0,
     lyricSize: verovioLyricSize(lyricsScale),
-    lyricTopMinMargin: 1.2,
-    bottomMarginHeader: compact ? 1.5 : 2.0,
+    // 오선(음표) ↔ 가사 간격
+    lyricTopMinMargin: compact ? 2.4 : 3.4,
+    spacingStaff: compact ? 12 : 14,
+    // 시스템(줄) 사이 최소 간격 — 제목 없는 2줄 페이지는 더 크게
+    spacingSystem: compact
+      ? looseNoTitle
+        ? 14
+        : twoSystemPage
+          ? 10
+          : 7
+      : looseNoTitle
+        ? 20
+        : twoSystemPage
+          ? 14
+          : 10,
+    // 제목 ↔ 첫 줄
+    bottomMarginHeader: compact
+      ? looseNoTitle
+        ? 1.5
+        : 3.0
+      : looseNoTitle
+        ? 2.0
+        : 5.0,
     pageMarginTop: compact ? 56 : 72,
     pageMarginBottom: 8,
     pageMarginLeft: 8,
@@ -121,6 +165,19 @@ export function buildVerovioOptions(
     mnumInterval: 0,
     svgHtml5: true,
   }
+}
+
+function meiHasVisibleTitle(mei: string): boolean {
+  // pgHead / title 안에 실제 글자가 있는지
+  const blocks = mei.matchAll(/<(?:pgHead|title)(\s[^>]*)?>([\s\S]*?)<\/(?:pgHead|title)>/gi)
+  for (const m of blocks) {
+    const inner = (m[2] ?? '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&[^;]+;/g, ' ')
+      .trim()
+    if (inner.length > 0) return true
+  }
+  return false
 }
 
 export async function resolveScorePayload(input: {
@@ -239,8 +296,16 @@ export async function renderScorePages(input: ScoreRenderInput): Promise<ScorePa
       workingMei = meiHideLowerStaves(workingMei)
     }
 
+    const hasTitle = meiHasVisibleTitle(workingMei)
     toolkit.setOptions(
-      buildVerovioOptions(style, compact, useLineBreaks ? 'line' : 'none', 'mei', useLineBreaks),
+      buildVerovioOptions(
+        style,
+        compact,
+        useLineBreaks ? 'line' : 'none',
+        'mei',
+        useLineBreaks,
+        { hasTitle },
+      ),
     )
     if (!toolkit.loadData(workingMei)) {
       throw new Error(useLineBreaks ? '줄바꿈 적용에 실패했습니다.' : '악보 재로드에 실패했습니다.')
