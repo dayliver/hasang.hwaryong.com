@@ -110,8 +110,9 @@ export function buildVerovioOptions(
     spacingLinear: clampSpacingLinear(style?.spacingLinear),
     systemMaxPerPage: paginate ? clampSystemsPerPage(style?.systemsPerPage) : 0,
     lyricSize: verovioLyricSize(lyricsScale),
-    lyricTopMinMargin: 1.2,
-    bottomMarginHeader: compact ? 1.5 : 2.0,
+    lyricTopMinMargin: 8, // 가사 위 여백, 기본값은 1.2
+    spacingSystem: 8, // 기본값은 4
+    bottomMarginHeader: compact ? 1.5 : 8.0, // 제목 아래 여백, 기본값은 1.5:2.0
     pageMarginTop: compact ? 56 : 72,
     pageMarginBottom: 8,
     pageMarginLeft: 8,
@@ -173,6 +174,10 @@ export function applyThemeToSvgRoot(root: HTMLElement, style?: ScoreStyle | null
     .artic, .flag, .tie path, .slur path, .tupletNum, .beam {
       fill: ${c.music} !important;
       stroke: ${c.music} !important;
+    }
+    .tupletBracket, .tupletBracket polyline, .tupletBracket line, .tupletBracket path {
+      stroke: ${c.music} !important;
+      fill: none !important;
     }
     .tie, .slur, .phrase { stroke: ${c.music} !important; fill: none !important; }
     .verse text, .syl text, text.syl, .syl, .verse {
