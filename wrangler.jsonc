@@ -1,11 +1,22 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hasang-hwaryong-com",
+  "main": "worker/index.ts",
   "compatibility_date": "2025-09-14",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hasang-masses",
+      "database_id": "1ce31c69-58ed-4604-b085-4e008e7c472b",
+      "migrations_dir": "migrations"
+    }
+  ],
   "routes": [
     {
       "pattern": "hasang.hwaryong.com",

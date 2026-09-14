@@ -49,13 +49,34 @@ export async function putAsset(record: AssetRecord): Promise<void> {
   }
 }
 
+import { fetchRemoteAssetBlob } from './api'
+
 export async function getAsset(id: string): Promise<AssetRecord | undefined> {
   const db = await openDb()
   try {
     const tx = db.transaction(STORE, 'readonly')
-    return await reqToPromise(tx.objectStore(STORE).get(id))
+    const local = await reqToPromise(tx.objectStore(STORE).get(id))
+    if (local) return local as AssetRecord
   } finally {
     db.close()
+  }
+
+  // 다른 브라우저: D1에 있는 에셋을 받아 IndexedDB에 캐시
+  try {
+    const remote = await fetchRemoteAssetBlob(id)
+    if (!remote) return undefined
+    const record: AssetRecord = {
+      id,
+      name: remote.name,
+      mime: remote.mime,
+      kind: remote.kind,
+      blob: remote.blob,
+      createdAt: remote.createdAt,
+    }
+    await putAsset(record)
+    return record
+  } catch {
+    return undefined
   }
 }
 

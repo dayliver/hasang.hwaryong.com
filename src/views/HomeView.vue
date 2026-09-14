@@ -3,7 +3,14 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import {
+  askEditPassword,
+  deleteRemoteMass,
+  fetchRemoteMasses,
+  uploadBundleToServer,
+} from '../lib/api'
+import {
   applyMassBundleAssets,
+  buildMassBundle,
   buildSingleMassBundle,
   downloadMassBundle,
   readBundleFromFile,
@@ -56,14 +63,58 @@ function createMass() {
   message.value = `「${mass.title}」을(를) 만들었습니다. 편집에서 이름·일시를 바꾸세요.`
 }
 
-function removeMass(mass: MassSession) {
+async function removeMass(mass: MassSession) {
   if (busy.value) return
   const ok = window.confirm(
-    `「${mass.title}」을(를) 삭제할까요?\n슬라이드와 올렸던 악보·이미지도 이 기기에서 지워집니다.`,
+    `「${mass.title}」을(를) 삭제할까요?\n서버(D1)와 이 기기에서 함께 지워집니다.`,
   )
   if (!ok) return
-  store.removeMass(mass.id)
-  message.value = `「${mass.title}」을(를) 삭제했습니다.`
+
+  const password = askEditPassword()
+  if (password === null) return
+
+  busy.value = true
+  message.value = ''
+  try {
+    await deleteRemoteMass(mass.id, password)
+    store.removeMass(mass.id)
+    message.value = `「${mass.title}」을(를) 서버에서 삭제했습니다.`
+  } catch (err) {
+    message.value = err instanceof Error ? err.message : '삭제에 실패했습니다.'
+    console.error(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function refreshFromServer() {
+  const remote = await fetchRemoteMasses()
+  if (remote) store.replaceAllMasses(remote)
+}
+
+async function pushLocalToServer() {
+  if (busy.value) return
+  const list = store.list()
+  if (!list.length) {
+    message.value = '올릴 미사가 없습니다.'
+    return
+  }
+  const password = askEditPassword('서버에 올릴 편집 비밀번호를 입력하세요.')
+  if (password === null) return
+
+  busy.value = true
+  message.value = ''
+  try {
+    const bundle = await buildMassBundle([...list])
+    const result = await uploadBundleToServer(bundle, password)
+    await refreshFromServer()
+    message.value = `서버 반영 완료 — 미사 ${result.masses}개 · 파일 ${result.assets}개`
+  } catch (err) {
+    message.value = err instanceof Error ? err.message : '서버 반영에 실패했습니다.'
+    console.error(err)
+  } finally {
+    busy.value = false
+  }
 }
 
 async function startSlideshow(mass: MassSession) {
@@ -80,13 +131,18 @@ async function onImportFile(ev: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file || busy.value) return
+
+  const password = askEditPassword('JSON을 서버(D1)에 저장할 편집 비밀번호를 입력하세요.')
+  if (password === null) return
+
   busy.value = true
   message.value = ''
   try {
     const bundle = await readBundleFromFile(file)
+    await uploadBundleToServer(bundle, password)
     await applyMassBundleAssets(bundle)
-    store.upsertMasses(bundle.masses)
-    message.value = `가져오기 완료 — ${summarizeBundle(bundle)} (같은 id면 덮어씀)`
+    await refreshFromServer()
+    message.value = `서버 저장 완료 — ${summarizeBundle(bundle)} (같은 id면 덮어씀)`
   } catch (err) {
     message.value = err instanceof Error ? err.message : '가져오기에 실패했습니다.'
     console.error(err)
@@ -116,7 +172,10 @@ async function onImportFile(ev: Event) {
             새 미사
           </button>
           <button type="button" class="btn ghost" :disabled="busy" @click="pickImport">
-            미사 가져오기 (JSON)
+            미사 가져오기 (JSON → D1)
+          </button>
+          <button type="button" class="btn ghost" :disabled="busy" @click="pushLocalToServer">
+            이 기기 → 서버
           </button>
           <input
             ref="importInput"
@@ -127,9 +186,9 @@ async function onImportFile(ev: Event) {
           />
         </div>
         <p class="backup-hint">
-          샘플 미사는 없습니다. 직접 만들거나 JSON을 가져오세요. 각 행의
-          <strong>보내기</strong>로 백업하고, GitHub 정적 시드가 필요하면
-          <code>public/data/hasang-bundle.json</code> 에 두면 됩니다.
+          JSON 가져오기와 「이 기기 → 서버」는 Cloudflare D1에 저장됩니다. 다른
+          브라우저·기기는 홈에서 같은 목록을 봅니다. 쓰기에는 편집 비밀번호가
+          필요합니다.
         </p>
         <p v-if="message" class="backup-msg">{{ message }}</p>
       </section>
