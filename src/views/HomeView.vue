@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import {
   applyMassBundleAssets,
@@ -9,9 +9,11 @@ import {
   readBundleFromFile,
   summarizeBundle,
 } from '../lib/massBundle'
+import { enterSlideshowFullscreen } from '../lib/present'
 import { useMassStore } from '../stores/mass'
 import type { MassSession } from '../types/mass'
 
+const router = useRouter()
 const store = useMassStore()
 const masses = computed(() =>
   [...store.list()].sort(
@@ -64,6 +66,11 @@ function removeMass(mass: MassSession) {
   message.value = `「${mass.title}」을(를) 삭제했습니다.`
 }
 
+async function startSlideshow(mass: MassSession) {
+  await enterSlideshowFullscreen()
+  await router.push(`/present/${mass.id}`)
+}
+
 function pickImport() {
   importInput.value?.click()
 }
@@ -91,15 +98,15 @@ async function onImportFile(ev: Event) {
 
 <template>
   <div class="page">
-    <AppHeader subtitle="미사 시간에 맞춰 슬라이드를 저장하고 투사합니다" />
+    <AppHeader subtitle="미사 자료를 만들고 보내고 가져옵니다" />
 
     <main class="main">
       <section class="intro">
-        <h1>미사 슬라이드</h1>
+        <h1>미사 관리</h1>
         <p>
-          식순 · 성가 번호 · 악보(MusicXML) · 블랙 · 이미지를 순서대로 구성한 뒤,
-          해당 미사 시간에 슬라이드쇼로 띄웁니다. 미사마다 JSON으로 보내고 가져올 수
-          있습니다.
+          여기서만 새 미사·가져오기·삭제·편집을 합니다. 성당 투영은
+          <RouterLink to="/">hasang.hwaryong.com</RouterLink> 루트에서 슬라이드쇼만
+          엽니다.
         </p>
       </section>
 
@@ -146,7 +153,14 @@ async function onImportFile(ev: Event) {
               보내기
             </button>
             <RouterLink class="btn ghost" :to="`/edit/${mass.id}`">편집</RouterLink>
-            <RouterLink class="btn primary" :to="`/present/${mass.id}`">슬라이드쇼</RouterLink>
+            <button
+              type="button"
+              class="btn primary"
+              :disabled="busy"
+              @click="startSlideshow(mass)"
+            >
+              슬라이드쇼
+            </button>
             <button
               type="button"
               class="btn ghost danger"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, RouterLink, useRouter } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import FileDropField from '../components/FileDropField.vue'
 import SlideCanvas from '../components/SlideCanvas.vue'
@@ -13,8 +13,10 @@ import {
   styleForSlide,
 } from '../lib/scoreStyle'
 import { SCORE_FONTS } from '../lib/scoreFonts'
+import { enterSlideshowFullscreen } from '../lib/present'
 
 const route = useRoute()
+const router = useRouter()
 const store = useMassStore()
 
 const massId = computed(() => String(route.params.id))
@@ -172,6 +174,12 @@ function setFont(id: ScoreFontId) {
 
 function setStaffFilter(id: ScoreStaffFilter) {
   patchScoreStyle({ staffFilter: id })
+}
+
+async function startSlideshow() {
+  if (!mass.value) return
+  await enterSlideshowFullscreen()
+  await router.push(`/present/${mass.value.id}`)
 }
 
 function patchHymn(partial: Partial<HymnRef>) {
@@ -393,7 +401,7 @@ function patchHymn(partial: Partial<HymnRef>) {
               <p class="style-hint">단색만 사용합니다. 새 악보는 직전 악보 스타일을 그대로 물려받습니다.</p>
               </fieldset>
             </div>
-            <RouterLink class="btn primary" :to="`/present/${mass.id}`">슬라이드쇼</RouterLink>
+            <button type="button" class="btn primary" @click="startSlideshow">슬라이드쇼</button>
           </div>
         </div>
 
@@ -643,7 +651,7 @@ function patchHymn(partial: Partial<HymnRef>) {
 
     <main v-else class="missing">
       <p>해당 미사를 찾을 수 없습니다.</p>
-      <RouterLink class="btn primary" to="/">목록으로</RouterLink>
+      <RouterLink class="btn primary" to="/manage">관리로</RouterLink>
     </main>
   </div>
 </template>

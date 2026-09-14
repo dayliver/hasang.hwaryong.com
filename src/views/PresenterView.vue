@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import SlideCanvas from '../components/SlideCanvas.vue'
+import { pickDefaultMass } from '../lib/present'
 import { styleForSlide } from '../lib/scoreStyle'
 import { useMassStore } from '../stores/mass'
 
@@ -9,8 +10,12 @@ const route = useRoute()
 const router = useRouter()
 const store = useMassStore()
 
-const massId = computed(() => String(route.params.id))
-const mass = computed(() => store.getById(massId.value))
+const massId = computed(() => {
+  const param = route.params.id
+  if (typeof param === 'string' && param) return param
+  return pickDefaultMass(store.list())?.id ?? ''
+})
+const mass = computed(() => (massId.value ? store.getById(massId.value) : undefined))
 
 const index = ref(0)
 /** Esc로 토글. 미사 중엔 숨기고, 필요할 때만 조작·편집 */
@@ -28,8 +33,18 @@ const scorePageCount = ref(1)
 let preferLastScorePage = false
 
 const hasScoreXml = computed(() =>
-  Boolean(slide.value?.mode === 'hymn-score' && (slide.value.hymn?.musicXmlAssetId || slide.value.hymn?.musicXmlUrl)),
+  Boolean(
+    slide.value?.mode === 'hymn-score' &&
+      (slide.value.hymn?.musicXmlAssetId || slide.value.hymn?.musicXmlUrl),
+  ),
 )
+
+watch(massId, () => {
+  index.value = 0
+  scorePage.value = 1
+  scorePageCount.value = 1
+  preferLastScorePage = false
+})
 
 watch(index, () => {
   scorePage.value = preferLastScorePage ? 9999 : 1
@@ -73,6 +88,10 @@ function goEdit() {
   void router.push(`/edit/${mass.value.id}`)
 }
 
+function goManage() {
+  void router.push('/manage')
+}
+
 function onKey(e: KeyboardEvent) {
   if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
     e.preventDefault()
@@ -92,6 +111,9 @@ function onKey(e: KeyboardEvent) {
   } else if ((e.key === 'e' || e.key === 'E') && showHud.value) {
     e.preventDefault()
     goEdit()
+  } else if ((e.key === 'm' || e.key === 'M') && showHud.value) {
+    e.preventDefault()
+    goManage()
   }
 }
 
@@ -128,8 +150,12 @@ const progressLabel = computed(() => {
 
       <div v-show="showHud" class="hud" @click.stop>
         <button type="button" class="hud-edit" @click="goEdit">
-          편집으로
+          편집
           <kbd>E</kbd>
+        </button>
+        <button type="button" class="hud-edit" @click="goManage">
+          관리
+          <kbd>M</kbd>
         </button>
         <p class="progress">{{ progressLabel }} · {{ mass.title }}</p>
         <div class="nav">
@@ -141,8 +167,8 @@ const progressLabel = computed(() => {
     </template>
 
     <div v-else class="missing">
-      <p>미사를 찾을 수 없습니다.</p>
-      <RouterLink class="btn primary" to="/">목록으로</RouterLink>
+      <p>표시할 미사가 없습니다.</p>
+      <RouterLink class="btn primary" to="/manage">관리로 가기</RouterLink>
     </div>
   </div>
 </template>

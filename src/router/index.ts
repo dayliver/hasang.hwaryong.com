@@ -8,9 +8,15 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'home',
+      name: 'present-home',
+      component: PresenterView,
+      meta: { title: '슬라이드쇼', chrome: false },
+    },
+    {
+      path: '/manage',
+      name: 'manage',
       component: HomeView,
-      meta: { title: '미사 목록' },
+      meta: { title: '관리' },
     },
     {
       path: '/edit/:id',
