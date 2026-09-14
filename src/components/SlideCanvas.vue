@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import type { ScoreStyle, ScoreTheme, Slide } from '../types/mass'
 import { SLIDE_MODE_LABEL } from '../types/mass'
 import { useAssetObjectUrl } from '../composables/useAssetObjectUrl'
 import { colorsForStyle } from '../lib/scoreStyle'
-import OsmdScore from './OsmdScore.vue'
 import SlideImage from './SlideImage.vue'
+
+const VerovioScore = defineAsyncComponent(() => import('./VerovioScore.vue'))
 
 const props = withDefaults(
   defineProps<{
@@ -30,7 +31,7 @@ const scoreImageSrc = computed(
   () => scoreImageAsset.url.value || props.slide.hymn?.scoreUrl || null,
 )
 
-const hasOsmd = computed(
+const hasScoreXml = computed(
   () => Boolean(props.slide.hymn?.musicXmlAssetId || props.slide.hymn?.musicXmlUrl),
 )
 
@@ -97,8 +98,8 @@ const effectiveTheme = computed(() => {
         </p>
       </div>
       <div class="score-frame">
-        <OsmdScore
-          v-if="hasOsmd"
+        <VerovioScore
+          v-if="hasScoreXml"
           :asset-id="slide.hymn?.musicXmlAssetId"
           :src="slide.hymn?.musicXmlUrl"
           :score-style="scoreStyle"
