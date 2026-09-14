@@ -1,4 +1,4 @@
-import type { ScoreFontId } from '../types/mass'
+import type { ScoreFontId, ScoreStyle } from '../types/mass'
 
 export type { ScoreFontId }
 
@@ -104,4 +104,43 @@ export const DEFAULT_SCORE_FONT_ID: ScoreFontId = 'pretendard'
 
 export function getScoreFont(id?: ScoreFontId | null): ScoreFont {
   return SCORE_FONTS.find((f) => f.id === id) ?? SCORE_FONTS[0]!
+}
+
+/** CSS stack에서 첫 번째 실제 패밀리 이름 */
+export function cssFontFamilyName(familyStack: string): string {
+  const m = familyStack.match(/"([^"]+)"|'([^']+)'|([^,\s]+)/)
+  return (m?.[1] || m?.[2] || m?.[3] || 'sans-serif').trim()
+}
+
+/** 악보에 쓰일 폰트·웨이트를 document.fonts 로 미리 로드 (FOUT 방지) */
+export async function ensureScoreFontsLoaded(
+  styles: Array<ScoreStyle | null | undefined>,
+): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts?.load) return
+
+  const byFamily = new Map<string, Set<string>>()
+  for (const style of styles) {
+    const font = getScoreFont(style?.fontId)
+    const name = cssFontFamilyName(font.family)
+    let weights = byFamily.get(name)
+    if (!weights) {
+      weights = new Set()
+      byFamily.set(name, weights)
+    }
+    weights.add(font.lyricsWeight)
+    weights.add(font.secondaryWeight)
+    weights.add(font.chordWeight)
+  }
+
+  const loads: Promise<unknown>[] = []
+  for (const [name, weights] of byFamily) {
+    for (const weight of weights) {
+      loads.push(
+        document.fonts.load(`${weight} 64px "${name}"`).catch(() => undefined),
+      )
+    }
+  }
+  await Promise.all(loads)
+  // 브라우저가 로드 반영할 한 프레임
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 }

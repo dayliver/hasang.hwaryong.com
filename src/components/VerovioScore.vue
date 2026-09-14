@@ -8,6 +8,7 @@ import {
   scoreStyleKey,
   type ScorePageCache,
 } from '../lib/scoreRender'
+import { ensureScoreFontsLoaded } from '../lib/scoreFonts'
 import { colorsForStyle } from '../lib/scoreStyle'
 
 const props = withDefaults(
@@ -37,6 +38,7 @@ const errorMessage = ref('')
 const fitStyle = ref<Record<string, string>>({})
 const hostStyle = ref<Record<string, string>>({})
 const pageCount = ref(1)
+const revealed = ref(false)
 
 const hasSource = computed(() => Boolean(props.assetId || props.src))
 const colors = computed(() => colorsForStyle(props.scoreStyle))
@@ -127,14 +129,21 @@ async function paintPage(page: number) {
     return
   }
 
+  revealed.value = false
   host.value.innerHTML = activeCache.pages[target - 1] ?? ''
+  await ensureScoreFontsLoaded([props.scoreStyle])
   await nextTick()
   fitUniform()
+  // 레이아웃·폰트 적용 후 페이드 인
+  requestAnimationFrame(() => {
+    revealed.value = true
+  })
 }
 
 async function renderScore() {
   const token = ++renderToken
   activeCache = null
+  revealed.value = false
   if (!host.value) return
 
   fitStyle.value = {}
@@ -151,6 +160,9 @@ async function renderScore() {
   errorMessage.value = ''
 
   try {
+    await ensureScoreFontsLoaded([props.scoreStyle])
+    if (token !== renderToken) return
+
     const key = cacheKey()
     let cached = getScorePageCache(key)
     if (!cached) {
@@ -220,7 +232,13 @@ onBeforeUnmount(() => {
     :class="[{ compact, 'theme-dark': colors.dark, 'theme-light': !colors.dark }]"
   >
     <div class="vrv-fit" :style="fitStyle">
-      <div ref="host" class="vrv-host" :style="hostStyle" aria-label="악보" />
+      <div
+        ref="host"
+        class="vrv-host"
+        :class="{ revealed }"
+        :style="hostStyle"
+        aria-label="악보"
+      />
     </div>
     <div v-if="status === 'loading'" class="vrv-loading" role="status">
       <span class="spinner" aria-hidden="true" />
@@ -252,6 +270,12 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0;
   left: 0;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+
+.vrv-host.revealed {
+  opacity: 1;
 }
 
 .vrv-host :deep(svg) {

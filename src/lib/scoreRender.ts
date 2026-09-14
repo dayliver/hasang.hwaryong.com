@@ -1,6 +1,6 @@
 import type { MassSession, ScoreStyle, Slide } from '../types/mass'
 import { getAsset } from './assetStore'
-import { getScoreFont } from './scoreFonts'
+import { getScoreFont, ensureScoreFontsLoaded } from './scoreFonts'
 import {
   colorsForStyle,
   clampLyricsScale,
@@ -272,7 +272,7 @@ function scoreSlides(mass: MassSession): Slide[] {
 }
 
 /**
- * 슬라이드쇼 시작 전: WASM + 미사 안 모든 MusicXML을 SVG로 미리 판각.
+ * 슬라이드쇼 시작 전: WASM + 폰트 + 미사 안 모든 MusicXML을 SVG로 미리 판각.
  * toolkit 싱글톤이라 순차 처리.
  */
 export async function preloadMassScores(
@@ -283,6 +283,14 @@ export async function preloadMassScores(
   await getVerovioToolkit()
 
   const slides = scoreSlides(mass)
+  const styles = [
+    mass.scoreStyle,
+    ...slides.map((s) => styleForSlide(s.scoreStyle, mass.scoreStyle)),
+  ]
+
+  onProgress?.(0, slides.length || 0, '가사 폰트 불러오는 중…')
+  await ensureScoreFontsLoaded(styles)
+
   if (!slides.length) {
     onProgress?.(0, 0, '준비 완료')
     return
