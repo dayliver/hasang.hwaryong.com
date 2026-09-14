@@ -60,13 +60,6 @@ const effectiveTheme = computed(() => {
       { compact, presenting },
     ]"
   >
-    <p
-      v-if="slide.mode !== 'black' && slide.mode !== 'image' && slide.mode !== 'title'"
-      class="slide-label"
-    >
-      {{ slide.label }}
-    </p>
-
     <template v-if="slide.mode === 'black'">
       <span class="sr-only">{{ slide.label || '블랙' }}</span>
     </template>
@@ -202,17 +195,6 @@ const effectiveTheme = computed(() => {
   width: 100%;
   height: 100%;
   min-height: 12rem;
-}
-
-.slide-label {
-  position: absolute;
-  top: 1rem;
-  left: 1.25rem;
-  margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  opacity: 0.55;
-  z-index: 1;
 }
 
 .slide-title {
