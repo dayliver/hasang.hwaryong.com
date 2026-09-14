@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import PublicHomeView from '../views/PublicHomeView.vue'
 import HomeView from '../views/HomeView.vue'
 import EditorView from '../views/EditorView.vue'
 import PresenterView from '../views/PresenterView.vue'
@@ -8,9 +9,9 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'present-home',
-      component: PresenterView,
-      meta: { title: '슬라이드쇼', chrome: false },
+      name: 'home',
+      component: PublicHomeView,
+      meta: { title: '미사 목록' },
     },
     {
       path: '/manage',

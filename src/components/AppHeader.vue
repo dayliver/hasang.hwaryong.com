@@ -9,7 +9,7 @@ defineProps<{
 <template>
   <header class="app-header">
     <div class="brand">
-      <RouterLink to="/manage" class="brand-link">
+      <RouterLink to="/" class="brand-link">
         <span class="brand-mark" aria-hidden="true" />
         <span class="brand-text">
           <span class="brand-name">성정하상바울로성당</span>
@@ -19,7 +19,7 @@ defineProps<{
     </div>
     <p v-if="subtitle" class="header-sub">{{ subtitle }}</p>
     <nav class="header-nav">
-      <RouterLink to="/">슬라이드쇼</RouterLink>
+      <RouterLink to="/">목록</RouterLink>
       <RouterLink to="/manage">관리</RouterLink>
     </nav>
   </header>

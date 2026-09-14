@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import SlideCanvas from '../components/SlideCanvas.vue'
-import { pickDefaultMass } from '../lib/present'
 import { styleForSlide } from '../lib/scoreStyle'
 import { useMassStore } from '../stores/mass'
 
@@ -10,11 +9,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useMassStore()
 
-const massId = computed(() => {
-  const param = route.params.id
-  if (typeof param === 'string' && param) return param
-  return pickDefaultMass(store.list())?.id ?? ''
-})
+const massId = computed(() => String(route.params.id ?? ''))
 const mass = computed(() => (massId.value ? store.getById(massId.value) : undefined))
 
 const index = ref(0)
@@ -167,8 +162,8 @@ const progressLabel = computed(() => {
     </template>
 
     <div v-else class="missing">
-      <p>표시할 미사가 없습니다.</p>
-      <RouterLink class="btn primary" to="/manage">관리로 가기</RouterLink>
+      <p>미사를 찾을 수 없습니다.</p>
+      <RouterLink class="btn primary" to="/">목록으로</RouterLink>
     </div>
   </div>
 </template>

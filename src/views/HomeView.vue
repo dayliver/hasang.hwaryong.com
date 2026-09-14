@@ -104,9 +104,9 @@ async function onImportFile(ev: Event) {
       <section class="intro">
         <h1>미사 관리</h1>
         <p>
-          여기서만 새 미사·가져오기·삭제·편집을 합니다. 성당 투영은
-          <RouterLink to="/">hasang.hwaryong.com</RouterLink> 루트에서 슬라이드쇼만
-          엽니다.
+          새 미사·가져오기·삭제·편집은 여기서 합니다. 성당 투영용 목록은
+          <RouterLink to="/">홈</RouterLink>에 있고, 거기서만 슬라이드쇼(전체화면)를
+          시작합니다.
         </p>
       </section>
 
