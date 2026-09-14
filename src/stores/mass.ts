@@ -1,7 +1,6 @@
 import { reactive, watch } from 'vue'
-import type { MassSession, Slide } from '../types/mass'
+import type { MassKind, MassSession, Slide } from '../types/mass'
 import { SLIDE_MODE_LABEL } from '../types/mass'
-import { sampleMasses } from '../data/sample'
 import { deleteAsset } from '../lib/assetStore'
 import { cloneResolvedScoreStyle } from '../lib/scoreStyle'
 
@@ -11,19 +10,15 @@ type MassPatch = Partial<
 
 const STORAGE_KEY = 'hasang-masses-v1'
 
-function cloneMasses(): MassSession[] {
-  return structuredClone(sampleMasses)
-}
-
 function loadMasses(): MassSession[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return cloneMasses()
+    if (!raw) return []
     const parsed = JSON.parse(raw) as MassSession[]
-    if (!Array.isArray(parsed) || parsed.length === 0) return cloneMasses()
+    if (!Array.isArray(parsed)) return []
     return parsed
   } catch {
-    return cloneMasses()
+    return []
   }
 }
 
@@ -44,6 +39,24 @@ watch(
   () => persist(),
   { deep: true },
 )
+
+function collectMassAssetIds(mass: MassSession): string[] {
+  const ids: string[] = []
+  for (const slide of mass.slides) {
+    if (slide.imageAssetId) ids.push(slide.imageAssetId)
+    if (slide.hymn?.musicXmlAssetId) ids.push(slide.hymn.musicXmlAssetId)
+    if (slide.hymn?.scoreAssetId) ids.push(slide.hymn.scoreAssetId)
+  }
+  return ids
+}
+
+function assetUsedElsewhere(assetId: string, exceptMassId: string): boolean {
+  for (const mass of state.masses) {
+    if (mass.id === exceptMassId) continue
+    if (collectMassAssetIds(mass).includes(assetId)) return true
+  }
+  return false
+}
 
 /** 목록에서 가장 뒤에 있는 악보 슬라이드의 스타일 (없으면 미사 기본) */
 function lastScoreStyleSeed(mass: MassSession) {
@@ -80,6 +93,10 @@ export function useMassStore() {
 
   function newSlideId() {
     return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+  }
+
+  function newMassId() {
+    return `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
   }
 
   function createBlankSlide(mode: Slide['mode'], mass?: MassSession): Slide {
@@ -213,11 +230,51 @@ export function useMassStore() {
     slide.hymn = hymn
   }
 
-  function reset() {
-    state.masses = cloneMasses()
+  function createMass(opts?: {
+    title?: string
+    kind?: MassKind
+    scheduledAt?: string
+    locationNote?: string
+  }): MassSession {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const localStamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:00`
+    const mass: MassSession = {
+      id: newMassId(),
+      title: opts?.title ?? '새 미사',
+      kind: opts?.kind ?? '주일미사',
+      scheduledAt: opts?.scheduledAt ?? localStamp,
+      locationNote: opts?.locationNote,
+      slides: [
+        {
+          id: newSlideId(),
+          mode: 'black',
+          label: '블랙',
+        },
+      ],
+    }
+    state.masses.push(mass)
+    return mass
   }
 
-  /** 브라우저에 사용자가 저장한 미사가 있는지 (샘플만이면 false) */
+  /** 미사 삭제. 다른 미사에서 안 쓰는 에셋은 IndexedDB에서도 제거 */
+  function removeMass(id: string): boolean {
+    const idx = state.masses.findIndex((m) => m.id === id)
+    if (idx < 0) return false
+    const mass = state.masses[idx]!
+    const assetIds = collectMassAssetIds(mass)
+    state.masses.splice(idx, 1)
+    for (const assetId of assetIds) {
+      if (!assetUsedElsewhere(assetId, id)) void deleteAsset(assetId)
+    }
+    return true
+  }
+
+  function clearAllMasses() {
+    state.masses = []
+  }
+
+  /** 브라우저에 저장된 미사가 있는지 */
   function hasPersistedMasses(): boolean {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
@@ -254,7 +311,9 @@ export function useMassStore() {
     updateSlide,
     updateMass,
     replaceSlideAsset,
-    reset,
+    createMass,
+    removeMass,
+    clearAllMasses,
     hasPersistedMasses,
     replaceAllMasses,
     upsertMasses,

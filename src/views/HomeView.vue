@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppHeader from '../components/AppHeader.vue'
 import {
-  BUNDLE_PUBLIC_PATH,
   applyMassBundleAssets,
   buildSingleMassBundle,
   downloadMassBundle,
@@ -50,6 +49,21 @@ async function exportMass(mass: MassSession) {
   }
 }
 
+function createMass() {
+  const mass = store.createMass()
+  message.value = `「${mass.title}」을(를) 만들었습니다. 편집에서 이름·일시를 바꾸세요.`
+}
+
+function removeMass(mass: MassSession) {
+  if (busy.value) return
+  const ok = window.confirm(
+    `「${mass.title}」을(를) 삭제할까요?\n슬라이드와 올렸던 악보·이미지도 이 기기에서 지워집니다.`,
+  )
+  if (!ok) return
+  store.removeMass(mass.id)
+  message.value = `「${mass.title}」을(를) 삭제했습니다.`
+}
+
 function pickImport() {
   importInput.value?.click()
 }
@@ -91,7 +105,10 @@ async function onImportFile(ev: Event) {
 
       <section class="backup-panel" aria-label="자료 가져오기">
         <div class="backup-actions">
-          <button type="button" class="btn primary" :disabled="busy" @click="pickImport">
+          <button type="button" class="btn primary" :disabled="busy" @click="createMass">
+            새 미사
+          </button>
+          <button type="button" class="btn ghost" :disabled="busy" @click="pickImport">
             미사 가져오기 (JSON)
           </button>
           <input
@@ -103,15 +120,15 @@ async function onImportFile(ev: Event) {
           />
         </div>
         <p class="backup-hint">
-          각 미사 행의 <strong>보내기</strong>로 한 미사만 JSON으로 받습니다. 가져온 미사
-          파일을 <code>public/data/hasang-bundle.json</code>
-          (<code>{{ BUNDLE_PUBLIC_PATH }}</code>) 에 두면, 로컬 자료가 없는 기기에서 자동
-          시드됩니다. 같은 id면 덮어씁니다.
+          샘플 미사는 없습니다. 직접 만들거나 JSON을 가져오세요. 각 행의
+          <strong>보내기</strong>로 백업하고, GitHub 정적 시드가 필요하면
+          <code>public/data/hasang-bundle.json</code> 에 두면 됩니다.
         </p>
         <p v-if="message" class="backup-msg">{{ message }}</p>
       </section>
 
       <section class="mass-list" aria-label="저장된 미사">
+        <p v-if="masses.length === 0" class="empty-list">저장된 미사가 없습니다.</p>
         <article v-for="mass in masses" :key="mass.id" class="mass-row">
           <div class="mass-when">
             <time :datetime="mass.scheduledAt">{{ formatWhen(mass.scheduledAt) }}</time>
@@ -130,6 +147,14 @@ async function onImportFile(ev: Event) {
             </button>
             <RouterLink class="btn ghost" :to="`/edit/${mass.id}`">편집</RouterLink>
             <RouterLink class="btn primary" :to="`/present/${mass.id}`">슬라이드쇼</RouterLink>
+            <button
+              type="button"
+              class="btn ghost danger"
+              :disabled="busy"
+              @click="removeMass(mass)"
+            >
+              삭제
+            </button>
           </div>
         </article>
       </section>
@@ -225,6 +250,13 @@ async function onImportFile(ev: Event) {
   border-top: 1px solid var(--line);
 }
 
+.empty-list {
+  margin: 0;
+  padding: 1.5rem 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .mass-row {
   display: grid;
   grid-template-columns: 11rem 1fr auto;
@@ -272,6 +304,15 @@ async function onImportFile(ev: Event) {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.btn.danger {
+  color: #a33;
+}
+
+.btn.danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #a33 40%, var(--line));
+  background: color-mix(in srgb, #a33 8%, transparent);
 }
 
 .modes-hint {
