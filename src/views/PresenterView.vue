@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import SlideCanvas from '../components/SlideCanvas.vue'
+import { preloadMassScores } from '../lib/scoreRender'
 import { styleForSlide } from '../lib/scoreStyle'
 import { useMassStore } from '../stores/mass'
 
@@ -15,6 +16,11 @@ const mass = computed(() => (massId.value ? store.getById(massId.value) : undefi
 const index = ref(0)
 /** Esc로 토글. 미사 중엔 숨기고, 필요할 때만 조작·편집 */
 const showHud = ref(false)
+
+const preparing = ref(true)
+const prepareDone = ref(0)
+const prepareTotal = ref(0)
+const prepareLabel = ref('악보 준비 중…')
 
 const slide = computed(() => mass.value?.slides[index.value])
 const total = computed(() => mass.value?.slides.length ?? 0)
@@ -34,11 +40,37 @@ const hasScoreXml = computed(() =>
   ),
 )
 
+async function prepareScores() {
+  preparing.value = true
+  prepareDone.value = 0
+  prepareTotal.value = 0
+  prepareLabel.value = '악보 엔진 불러오는 중…'
+  const current = mass.value
+  if (!current) {
+    preparing.value = false
+    return
+  }
+  try {
+    await preloadMassScores(current, (done, totalCount, label) => {
+      prepareDone.value = done
+      prepareTotal.value = totalCount
+      prepareLabel.value = label
+    })
+  } catch (err) {
+    console.error('[PresenterView] preload', err)
+    prepareLabel.value = '일부 악보 준비에 실패했습니다. 그래도 시작합니다.'
+    await new Promise((r) => setTimeout(r, 600))
+  } finally {
+    preparing.value = false
+  }
+}
+
 watch(massId, () => {
   index.value = 0
   scorePage.value = 1
   scorePageCount.value = 1
   preferLastScorePage = false
+  void prepareScores()
 })
 
 watch(index, () => {
@@ -59,7 +91,7 @@ function onScorePageCount(count: number) {
 }
 
 function go(delta: number) {
-  if (!mass.value) return
+  if (preparing.value || !mass.value) return
 
   if (hasScoreXml.value && scorePageCount.value > 1) {
     if (delta > 0 && scorePage.value < scorePageCount.value) {
@@ -88,6 +120,7 @@ function goManage() {
 }
 
 function onKey(e: KeyboardEvent) {
+  if (preparing.value) return
   if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
     e.preventDefault()
     go(1)
@@ -114,6 +147,7 @@ function onKey(e: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  void prepareScores()
 })
 
 onUnmounted(() => {
@@ -127,11 +161,28 @@ const progressLabel = computed(() => {
   }
   return base
 })
+
+const preparePercent = computed(() => {
+  if (prepareTotal.value <= 0) return preparing.value ? 12 : 100
+  return Math.round((prepareDone.value / prepareTotal.value) * 100)
+})
 </script>
 
 <template>
   <div class="presenter" @click="go(1)">
-    <template v-if="mass && slide">
+    <div v-if="preparing" class="prepare-overlay" @click.stop>
+      <span class="spinner" aria-hidden="true" />
+      <p class="prepare-title">슬라이드쇼 준비</p>
+      <p class="prepare-label">{{ prepareLabel }}</p>
+      <div v-if="prepareTotal > 0" class="prepare-bar" aria-hidden="true">
+        <span :style="{ width: `${preparePercent}%` }" />
+      </div>
+      <p v-if="prepareTotal > 0" class="prepare-count">
+        {{ prepareDone }} / {{ prepareTotal }}
+      </p>
+    </div>
+
+    <template v-else-if="mass && slide">
       <SlideCanvas
         :slide="slide"
         :score-theme="mass.scoreTheme ?? 'dark'"
@@ -184,6 +235,74 @@ const progressLabel = computed(() => {
   max-height: 100dvh;
   border-radius: 0 !important;
   box-shadow: none !important;
+}
+
+.prepare-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.65rem;
+  background: #050706;
+  color: #f4efe4;
+  cursor: default;
+}
+
+.prepare-title {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.prepare-label {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(244, 239, 228, 0.65);
+  text-align: center;
+  max-width: 22rem;
+  line-height: 1.4;
+}
+
+.prepare-bar {
+  width: min(16rem, 70vw);
+  height: 0.35rem;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: rgba(244, 239, 228, 0.12);
+  overflow: hidden;
+}
+
+.prepare-bar > span {
+  display: block;
+  height: 100%;
+  background: #e8c57a;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.prepare-count {
+  margin: 0;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 239, 228, 0.45);
+}
+
+.spinner {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  border: 2px solid rgba(244, 239, 228, 0.18);
+  border-top-color: #e8c57a;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .hud {
