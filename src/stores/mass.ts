@@ -3,6 +3,7 @@ import type { MassSession, Slide } from '../types/mass'
 import { SLIDE_MODE_LABEL } from '../types/mass'
 import { sampleMasses } from '../data/sample'
 import { deleteAsset } from '../lib/assetStore'
+import { cloneResolvedScoreStyle } from '../lib/scoreStyle'
 
 type MassPatch = Partial<
   Pick<MassSession, 'title' | 'kind' | 'scheduledAt' | 'locationNote' | 'scoreTheme' | 'scoreStyle'>
@@ -44,6 +45,16 @@ watch(
   { deep: true },
 )
 
+/** 목록에서 가장 뒤에 있는 악보 슬라이드의 스타일 (없으면 미사 기본) */
+function lastScoreStyleSeed(mass: MassSession) {
+  for (let i = mass.slides.length - 1; i >= 0; i -= 1) {
+    const s = mass.slides[i]!
+    if (s.mode !== 'hymn-score') continue
+    return cloneResolvedScoreStyle(s.scoreStyle ?? mass.scoreStyle)
+  }
+  return cloneResolvedScoreStyle(mass.scoreStyle)
+}
+
 export function useMassStore() {
   function list() {
     return state.masses
@@ -71,7 +82,7 @@ export function useMassStore() {
     return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
   }
 
-  function createBlankSlide(mode: Slide['mode']): Slide {
+  function createBlankSlide(mode: Slide['mode'], mass?: MassSession): Slide {
     const label = SLIDE_MODE_LABEL[mode] ?? '슬라이드'
     const slide: Slide = {
       id: newSlideId(),
@@ -80,6 +91,9 @@ export function useMassStore() {
     }
     if (mode === 'hymn-number' || mode === 'hymn-score') {
       slide.hymn = { number: '', title: '' }
+    }
+    if (mode === 'hymn-score' && mass) {
+      slide.scoreStyle = lastScoreStyleSeed(mass)
     }
     if (mode === 'prayer' || mode === 'order' || mode === 'title') {
       slide.body = ''
@@ -91,7 +105,7 @@ export function useMassStore() {
   function addSlide(id: string, mode: Slide['mode'], afterIndex?: number): Slide | undefined {
     const mass = getById(id)
     if (!mass) return
-    const slide = createBlankSlide(mode)
+    const slide = createBlankSlide(mode, mass)
     const at =
       afterIndex === undefined
         ? mass.slides.length

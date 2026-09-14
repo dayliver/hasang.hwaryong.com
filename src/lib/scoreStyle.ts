@@ -125,6 +125,28 @@ export function clampLyricsScale(value: number | undefined | null): number {
   return Math.min(1.8, Math.max(0.8, Math.round(n * 20) / 20))
 }
 
+/** Verovio 기본 0.6 근처 — 가사 가독용으로 살짝 완화한 기본값 */
+export const DEFAULT_SPACING_NON_LINEAR = 0.55
+/** Verovio 기본 0.25보다 타이트한 투사용 기본값 */
+export const DEFAULT_SPACING_LINEAR = 0.1
+
+export function clampSpacingNonLinear(value: number | undefined | null): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_SPACING_NON_LINEAR
+  return Math.min(1, Math.max(0.15, Math.round(n * 100) / 100))
+}
+
+export function clampSpacingLinear(value: number | undefined | null): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_SPACING_LINEAR
+  return Math.min(0.4, Math.max(0.02, Math.round(n * 100) / 100))
+}
+
+export const DEFAULT_SYSTEMS_PER_PAGE = 2
+
+export function clampSystemsPerPage(value: number | undefined | null): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : DEFAULT_SYSTEMS_PER_PAGE
+  return Math.min(4, Math.max(1, n))
+}
+
 export function resolveScoreStyle(style?: ScoreStyle | null): Required<ScoreStyle> {
   const c = colorsForStyle(style)
   const fontId = (style?.fontId ?? DEFAULT_SCORE_FONT_ID) as ScoreFontId
@@ -133,11 +155,26 @@ export function resolveScoreStyle(style?: ScoreStyle | null): Required<ScoreStyl
     fontId,
     staffFilter: style?.staffFilter === 'treble' ? 'treble' : 'all',
     lyricsScale: clampLyricsScale(style?.lyricsScale),
+    spacingNonLinear: clampSpacingNonLinear(style?.spacingNonLinear),
+    spacingLinear: clampSpacingLinear(style?.spacingLinear),
+    systemsPerPage: clampSystemsPerPage(style?.systemsPerPage),
     musicColor: c.music,
     chordColor: c.chord,
     lyricsColor: c.lyrics,
     secondaryLyricsColor: c.secondaryLyrics,
   }
+}
+
+/** 슬라이드 스타일 → 없으면 미사 기본 → 앱 기본 */
+export function styleForSlide(
+  slideStyle?: ScoreStyle | null,
+  massStyle?: ScoreStyle | null,
+): Required<ScoreStyle> {
+  return resolveScoreStyle(slideStyle ?? massStyle)
+}
+
+export function cloneResolvedScoreStyle(style?: ScoreStyle | null): ScoreStyle {
+  return { ...resolveScoreStyle(style) }
 }
 
 export const DEFAULT_SCORE_STYLE: Required<ScoreStyle> = resolveScoreStyle({ palette: 'candle' })

@@ -6,7 +6,12 @@ import FileDropField from '../components/FileDropField.vue'
 import SlideCanvas from '../components/SlideCanvas.vue'
 import { useMassStore } from '../stores/mass'
 import { SLIDE_MODE_LABEL, type HymnRef, type ScoreFontId, type ScorePaletteId, type ScoreStaffFilter, type ScoreStyle, type SlideMode } from '../types/mass'
-import { DEFAULT_SCORE_STYLE, SCORE_PALETTES, getPalette, resolveScoreStyle } from '../lib/scoreStyle'
+import {
+  SCORE_PALETTES,
+  cloneResolvedScoreStyle,
+  getPalette,
+  styleForSlide,
+} from '../lib/scoreStyle'
 import { SCORE_FONTS } from '../lib/scoreFonts'
 
 const route = useRoute()
@@ -67,22 +72,56 @@ function removeSelected() {
 }
 
 function setMode(mode: SlideMode) {
-  if (!selected.value) return
-  store.updateSlide(massId.value, selected.value.id, { mode })
+  if (!selected.value || !mass.value) return
+  const patch: Partial<typeof selected.value> = { mode }
+  if ((mode === 'hymn-number' || mode === 'hymn-score') && !selected.value.hymn) {
+    patch.hymn = { number: '', title: '' }
+  }
+  if (mode === 'hymn-score' && !selected.value.scoreStyle) {
+    const seed =
+      [...mass.value.slides]
+        .reverse()
+        .find((s) => s.mode === 'hymn-score' && s.id !== selected.value!.id)?.scoreStyle ??
+      mass.value.scoreStyle
+    patch.scoreStyle = cloneResolvedScoreStyle(seed)
+  }
+  store.updateSlide(massId.value, selected.value.id, patch)
 }
 
+/** 선택 중 악보 슬라이드 스타일 패치 (없으면 미사 기본을 시드로 복사) */
 function patchScoreStyle(partial: Partial<ScoreStyle>) {
-  const current = resolveScoreStyle(mass.value?.scoreStyle)
+  if (!selected.value || !mass.value || selected.value.mode !== 'hymn-score') return
+  const current = styleForSlide(selected.value.scoreStyle, mass.value.scoreStyle)
   const next = { ...current, ...partial }
   const palette = getPalette(next.palette)
+  store.updateSlide(massId.value, selected.value.id, { scoreStyle: next })
+  // 미사 기본도 최신으로 맞춰, 예전 슬라이드·첫 악보 폴백에 씀
   store.updateMass(massId.value, {
     scoreStyle: next,
     scoreTheme: palette.dark ? 'dark' : 'light',
   })
 }
 
-const scoreStyleResolved = computed(() => resolveScoreStyle(mass.value?.scoreStyle))
+const scoreStyleResolved = computed(() =>
+  styleForSlide(selected.value?.scoreStyle, mass.value?.scoreStyle),
+)
+const canEditScoreStyle = computed(() => selected.value?.mode === 'hymn-score')
 const showDetailColors = ref(false)
+
+const scorePage = ref(1)
+const scorePageCount = ref(1)
+
+watch(selectedId, () => {
+  scorePage.value = 1
+  scorePageCount.value = 1
+})
+
+function onScorePageCount(count: number) {
+  const next = Math.max(1, count)
+  if (scorePageCount.value !== next) scorePageCount.value = next
+  const clamped = Math.min(Math.max(scorePage.value, 1), scorePageCount.value)
+  if (scorePage.value !== clamped) scorePage.value = clamped
+}
 
 function setPalette(id: ScorePaletteId) {
   const p = getPalette(id)
@@ -140,8 +179,14 @@ function formatWhen(iso: string) {
             <p class="when">{{ formatWhen(mass.scheduledAt) }}</p>
           </div>
           <div class="rail-actions">
-            <div class="style-panel">
-              <p class="style-caption">악보 색</p>
+            <div class="style-panel" :class="{ disabled: !canEditScoreStyle }">
+              <p class="style-caption">
+                {{ canEditScoreStyle ? '이 악보 스타일' : '악보 스타일' }}
+              </p>
+              <p v-if="!canEditScoreStyle" class="style-hint">
+                악보 슬라이드를 선택하면 글씨·색을 각각 조절할 수 있습니다.
+              </p>
+              <fieldset :disabled="!canEditScoreStyle" class="style-fields">
               <div class="palette-row" role="group" aria-label="악보 팔레트">
                 <button
                   v-for="p in SCORE_PALETTES"
@@ -274,7 +319,8 @@ function formatWhen(iso: string) {
                   />
                 </label>
               </template>
-              <p class="style-hint">단색만 사용합니다. 투명도는 겹친 벡터가 지저분해져서 쓰지 않습니다.</p>
+              <p class="style-hint">단색만 사용합니다. 새 악보는 직전 악보 스타일을 그대로 물려받습니다.</p>
+              </fieldset>
             </div>
             <RouterLink class="btn primary" :to="`/present/${mass.id}`">슬라이드쇼</RouterLink>
           </div>
@@ -360,9 +406,31 @@ function formatWhen(iso: string) {
           <SlideCanvas
             :slide="selected"
             :score-theme="mass.scoreTheme ?? 'dark'"
-            :score-style="mass.scoreStyle ?? DEFAULT_SCORE_STYLE"
+            :score-style="scoreStyleResolved"
+            :score-page="scorePage"
             compact
+            @update:score-page="scorePage = $event"
+            @score-page-count="onScorePageCount"
           />
+          <div v-if="selected.mode === 'hymn-score' && scorePageCount > 1" class="page-nav">
+            <button
+              type="button"
+              class="btn ghost"
+              :disabled="scorePage <= 1"
+              @click="scorePage -= 1"
+            >
+              이전 줄
+            </button>
+            <span class="page-nav-label">{{ scorePage }} / {{ scorePageCount }}</span>
+            <button
+              type="button"
+              class="btn ghost"
+              :disabled="scorePage >= scorePageCount"
+              @click="scorePage += 1"
+            >
+              다음 줄
+            </button>
+          </div>
         </div>
         <p v-else class="empty">왼쪽에서 슬라이드를 선택하세요.</p>
 
@@ -378,6 +446,68 @@ function formatWhen(iso: string) {
               "
             />
           </label>
+
+          <div v-if="selected.mode === 'hymn-score'" class="spacing-fields">
+            <p class="field-caption">음표 간격 · 화면당 줄</p>
+            <label class="font-row field-select">
+              <span>
+                <strong>화면당 줄 수</strong>
+                <em>긴 악보를 나눠 보기</em>
+              </span>
+              <select
+                :value="scoreStyleResolved.systemsPerPage"
+                @change="
+                  patchScoreStyle({
+                    systemsPerPage: Number(($event.target as HTMLSelectElement).value),
+                  })
+                "
+              >
+                <option :value="1">1줄</option>
+                <option :value="2">2줄</option>
+                <option :value="3">3줄</option>
+                <option :value="4">4줄</option>
+              </select>
+            </label>
+            <label class="field-slider">
+              <span class="scale-label">
+                <strong>시가 대비</strong>
+                <em>{{ scoreStyleResolved.spacingNonLinear.toFixed(2) }}</em>
+              </span>
+              <input
+                type="range"
+                min="0.15"
+                max="1"
+                step="0.05"
+                :value="scoreStyleResolved.spacingNonLinear"
+                @input="
+                  patchScoreStyle({
+                    spacingNonLinear: Number(($event.target as HTMLInputElement).value),
+                  })
+                "
+              />
+              <span class="slider-hint">낮을수록 긴·짧은 음 칸 차이 ↓ · 1이면 시가 그대로</span>
+            </label>
+            <label class="field-slider">
+              <span class="scale-label">
+                <strong>가로 밀도</strong>
+                <em>{{ scoreStyleResolved.spacingLinear.toFixed(2) }}</em>
+              </span>
+              <input
+                type="range"
+                min="0.02"
+                max="0.4"
+                step="0.01"
+                :value="scoreStyleResolved.spacingLinear"
+                @input="
+                  patchScoreStyle({
+                    spacingLinear: Number(($event.target as HTMLInputElement).value),
+                  })
+                "
+              />
+              <span class="slider-hint">높을수록 전체 더 넓게</span>
+            </label>
+          </div>
+
           <label v-if="selected.mode === 'prayer' || selected.mode === 'order' || selected.mode === 'title'">
             본문
             <textarea
@@ -487,6 +617,23 @@ function formatWhen(iso: string) {
   border: 1px solid var(--line);
   border-radius: 0.55rem;
   background: var(--surface);
+}
+
+.style-panel.disabled {
+  opacity: 0.72;
+}
+
+.style-fields {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.style-fields:disabled {
+  pointer-events: none;
 }
 
 .style-caption {
@@ -649,6 +796,13 @@ function formatWhen(iso: string) {
 .opacity-row input[type='range'] {
   width: 100%;
   accent-color: var(--ink);
+}
+
+.slider-hint {
+  font-size: 0.65rem;
+  line-height: 1.3;
+  color: var(--muted);
+  opacity: 0.9;
 }
 
 .style-hint {
@@ -877,10 +1031,62 @@ function formatWhen(iso: string) {
   width: min(100%, 920px);
 }
 
+.page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+}
+
+.page-nav-label {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 4rem;
+  text-align: center;
+}
+
 .fields {
   display: grid;
   gap: 0.85rem;
   width: min(100%, 920px);
+}
+
+.field-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.field-select span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.field-select strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.field-select em {
+  font-style: normal;
+  opacity: 0.85;
+  font-size: 0.7rem;
+}
+
+.field-select select {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .field-caption {
@@ -888,6 +1094,50 @@ function formatWhen(iso: string) {
   font-size: 0.8rem;
   color: var(--muted);
   font-weight: 600;
+}
+
+.spacing-fields {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.field-slider {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.field-slider .scale-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.field-slider .scale-label strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.field-slider .scale-label em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.field-slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--ink);
+}
+
+.field-slider .slider-hint {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .upload-block {

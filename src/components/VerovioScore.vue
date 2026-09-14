@@ -3,7 +3,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ScoreStyle } from '../types/mass'
 import { getAsset } from '../lib/assetStore'
 import { getScoreFont } from '../lib/scoreFonts'
-import { colorsForStyle, clampLyricsScale } from '../lib/scoreStyle'
+import {
+  colorsForStyle,
+  clampLyricsScale,
+  clampSpacingLinear,
+  clampSpacingNonLinear,
+  clampSystemsPerPage,
+} from '../lib/scoreStyle'
 import { getVerovioToolkit, isZipBuffer, meiHideLowerStaves } from '../lib/verovioToolkit'
 
 const props = withDefaults(
@@ -12,11 +18,19 @@ const props = withDefaults(
     assetId?: string
     scoreStyle?: ScoreStyle | null
     compact?: boolean
+    /** 1-based Verovio page */
+    page?: number
   }>(),
   {
     compact: false,
+    page: 1,
   },
 )
+
+const emit = defineEmits<{
+  'update:page': [page: number]
+  pageCount: [count: number]
+}>()
 
 const wrap = ref<HTMLElement | null>(null)
 const host = ref<HTMLElement | null>(null)
@@ -24,31 +38,65 @@ const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const errorMessage = ref('')
 const fitStyle = ref<Record<string, string>>({})
 const hostStyle = ref<Record<string, string>>({})
+const pageCount = ref(1)
 
 const hasSource = computed(() => Boolean(props.assetId || props.src))
 const colors = computed(() => colorsForStyle(props.scoreStyle))
 const scoreFont = computed(() => getScoreFont(props.scoreStyle?.fontId))
+const systemsPerPage = computed(() => clampSystemsPerPage(props.scoreStyle?.systemsPerPage))
 
 let renderToken = 0
 let resizeObserver: ResizeObserver | null = null
+/** 로드된 악보가 아직 toolkit에 있을 때만 페이지 전환 가능 */
+let scoreLoaded = false
 
-function buildVerovioOptions() {
+function hasForcedSystemBreaks(source: string): boolean {
+  return /new-system\s*=\s*["']yes["']/i.test(source) || /<sb[\s/>]/i.test(source)
+}
+
+/**
+ * Verovio lyricSize는 2~8만 허용.
+ * UI 배율 0.8~1.8을 그 구간에 선형 매핑 (넘치면 옵션이 무시되어 크기 변화가 없어 보였음).
+ */
+function verovioLyricSize(scale: number): number {
+  const s = clampLyricsScale(scale)
+  const t = (s - 0.8) / (1.8 - 0.8)
+  return Math.round((2 + t * 6) * 100) / 100
+}
+
+function buildVerovioOptions(
+  breaks: 'none' | 'line' = 'none',
+  inputFrom: 'xml' | 'mei' = 'xml',
+  paginate = false,
+) {
   const lyricsScale = clampLyricsScale(props.scoreStyle?.lyricsScale)
+  const spacingNonLinear = clampSpacingNonLinear(props.scoreStyle?.spacingNonLinear)
+  const spacingLinear = clampSpacingLinear(props.scoreStyle?.spacingLinear)
   return {
-    inputFrom: 'xml',
+    inputFrom,
     scale: props.compact ? 36 : 42,
     pageWidth: props.compact ? 1400 : 2000,
     adjustPageHeight: true,
-    adjustPageWidth: true,
-    breaks: 'auto' as const,
+    // true면 내용에 맞춰 페이지 폭이 줄어 윗줄·아랫줄 너비가 어긋나기 쉬움
+    adjustPageWidth: false,
+    breaks,
     footer: 'none' as const,
-    header: 'none' as const,
+    header: 'auto' as const,
+    usePgHeaderForAll: false,
     svgViewBox: true,
-    // 시가에 비례하는 가로 간격 (근본 목적)
-    spacingNonLinear: 1.0,
-    spacingLinear: props.compact ? 0.04 : 0.05,
-    lyricSize: (props.compact ? 5.2 : 6.2) * lyricsScale,
-    lyricTopMinMargin: 2.0,
+    spacingNonLinear,
+    spacingLinear,
+    // line + systemMaxPerPage 로 N줄씩 페이지 분할 (encoded는 한 페이지에 몰아넣음)
+    systemMaxPerPage: paginate ? systemsPerPage.value : 0,
+    lyricSize: verovioLyricSize(lyricsScale),
+    lyricTopMinMargin: 1.2,
+    bottomMarginHeader: props.compact ? 1.5 : 2.0,
+    pageMarginTop: props.compact ? 56 : 72,
+    pageMarginBottom: 8,
+    pageMarginLeft: 8,
+    pageMarginRight: 8,
+    noJustification: false,
+    minLastJustification: 0,
     mnumInterval: 0,
     svgHtml5: true,
   }
@@ -95,6 +143,10 @@ function applyThemeToSvgRoot(root: HTMLElement) {
     .barLine, .barLine path, .stem, .stem path, .tremolo, .vq {
       stroke: ${c.music} !important;
     }
+    .barLine use {
+      fill: ${c.music} !important;
+      color: ${c.music} !important;
+    }
     .notehead, .clef, .keySig, .keyAccid, .meterSig, .rest, .dots, .accid,
     .artic, .flag, .tie path, .slur path, .tupletNum, .beam {
       fill: ${c.music} !important;
@@ -111,18 +163,25 @@ function applyThemeToSvgRoot(root: HTMLElement) {
       font-family: ${font.family} !important;
       font-weight: ${font.chordWeight} !important;
     }
+    .pgHead text, .pgHead .text, .pgHead .rend, .pgFooter text {
+      fill: ${c.title} !important;
+      font-family: ${font.family} !important;
+      font-weight: ${font.lyricsWeight} !important;
+    }
     .mNum, .mNum text { display: none !important; }
   `
   const svg = root.querySelector('svg')
   if (svg) svg.prepend(style)
   else root.prepend(style)
 
-  // 오선 hairline
-  root.querySelectorAll('.staff line, .staff path').forEach((el) => {
-    const s = el as SVGElement
-    s.setAttribute('vector-effect', 'non-scaling-stroke')
-    s.style.vectorEffect = 'non-scaling-stroke'
-    s.style.strokeWidth = '0.7px'
+  const titleScale = 1.4
+  root.querySelectorAll('.pgHead [font-size]').forEach((el) => {
+    const raw = el.getAttribute('font-size')
+    if (!raw) return
+    const n = Number.parseFloat(raw)
+    if (!Number.isFinite(n) || n <= 0) return
+    const unit = raw.replace(/[\d.+-eE]/g, '') || 'px'
+    el.setAttribute('font-size', `${n * titleScale}${unit}`)
   })
 }
 
@@ -159,10 +218,10 @@ function fitUniform() {
     totalH += h
   }
 
-  const pad = props.compact ? 0.9 : 0.93
+  const pad = props.compact ? 0.98 : 0.995
   const availW = Math.max(wrapEl.clientWidth, 1) * pad
   const availH = Math.max(wrapEl.clientHeight, 1) * pad
-  const maxScale = props.compact ? 1.45 : 3.4
+  const maxScale = props.compact ? 1.6 : 4
   const scale = Math.min(availW / totalW, availH / totalH, maxScale)
 
   fitStyle.value = {
@@ -177,8 +236,57 @@ function fitUniform() {
   }
 }
 
+function clampPage(page: number, count: number): number {
+  return Math.min(Math.max(Math.round(page) || 1, 1), Math.max(count, 1))
+}
+
+/** 객체 참조가 바뀌어도 내용이 같으면 재로드하지 않기 위함 */
+function styleRenderKey(style?: ScoreStyle | null): string {
+  if (!style) return ''
+  return [
+    style.palette ?? '',
+    style.fontId ?? '',
+    style.staffFilter ?? '',
+    style.lyricsScale ?? '',
+    style.spacingNonLinear ?? '',
+    style.spacingLinear ?? '',
+    style.systemsPerPage ?? '',
+    style.musicColor ?? '',
+    style.chordColor ?? '',
+    style.lyricsColor ?? '',
+    style.secondaryLyricsColor ?? '',
+  ].join('\0')
+}
+
+function setPageCount(count: number) {
+  const next = Math.max(1, count)
+  if (pageCount.value === next) return
+  pageCount.value = next
+  emit('pageCount', next)
+}
+
+async function paintPage(page: number) {
+  if (!host.value || !scoreLoaded) return
+  const toolkit = await getVerovioToolkit()
+  const count = Math.max(1, toolkit.getPageCount())
+  setPageCount(count)
+
+  const target = clampPage(page, count)
+  if (target !== props.page) {
+    emit('update:page', target)
+    // 부모가 page를 고치면 watch가 다시 paintPage 호출
+    return
+  }
+
+  host.value.innerHTML = toolkit.renderToSVG(target)
+  applyThemeToSvgRoot(host.value)
+  await nextTick()
+  fitUniform()
+}
+
 async function renderScore() {
   const token = ++renderToken
+  scoreLoaded = false
   if (!host.value) return
 
   fitStyle.value = {}
@@ -187,12 +295,13 @@ async function renderScore() {
   if (!hasSource.value) {
     status.value = 'idle'
     host.value.innerHTML = ''
+    setPageCount(1)
     return
   }
 
   status.value = 'loading'
   errorMessage.value = ''
-  host.value.innerHTML = ''
+  // 이전 SVG는 새 판각이 끝날 때까지 유지 (깜빡임·재진입 루프 완화)
 
   try {
     const toolkit = await getVerovioToolkit()
@@ -201,7 +310,8 @@ async function renderScore() {
     const payload = await resolveScorePayload()
     if (token !== renderToken) return
 
-    toolkit.setOptions(buildVerovioOptions())
+    // 1차: 자동 줄바꿈 없이 로드 → MEI에 강제 sb가 있는지 확인
+    toolkit.setOptions(buildVerovioOptions('none'))
 
     let loaded = false
     if (payload.kind === 'zip') {
@@ -211,31 +321,33 @@ async function renderScore() {
     }
     if (!loaded) throw new Error('악보 데이터를 해석하지 못했습니다.')
 
+    const sourceHint = payload.kind === 'xml' ? payload.text : ''
+    const mei = toolkit.getMEI()
+    const useLineBreaks = hasForcedSystemBreaks(sourceHint) || hasForcedSystemBreaks(mei)
+
+    let workingMei = mei
     if (props.scoreStyle?.staffFilter === 'treble') {
-      const mei = toolkit.getMEI()
-      const filtered = meiHideLowerStaves(mei)
-      if (filtered !== mei) {
-        toolkit.setOptions(buildVerovioOptions())
-        if (!toolkit.loadData(filtered)) {
-          throw new Error('트레블 필터를 적용하지 못했습니다.')
-        }
-      }
+      workingMei = meiHideLowerStaves(workingMei)
     }
 
-    const pageCount = Math.max(1, toolkit.getPageCount())
-    const chunks: string[] = []
-    for (let page = 1; page <= pageCount; page++) {
-      chunks.push(toolkit.renderToSVG(page))
+    // 강제 줄바꿈이 있으면 line + systemMaxPerPage 로 N줄씩 페이지화
+    // (encoded는 모든 시스템을 한 페이지에 쌓아서 투영에 부적합)
+    // MEI 재로드 시 inputFrom: mei 필수
+    toolkit.setOptions(
+      buildVerovioOptions(useLineBreaks ? 'line' : 'none', 'mei', useLineBreaks),
+    )
+    if (!toolkit.loadData(workingMei)) {
+      throw new Error(useLineBreaks ? '줄바꿈 적용에 실패했습니다.' : '악보 재로드에 실패했습니다.')
     }
-    host.value.innerHTML = chunks.join('')
-    applyThemeToSvgRoot(host.value)
 
-    await nextTick()
     if (token !== renderToken) return
-    fitUniform()
+    scoreLoaded = true
     status.value = 'ready'
+    await paintPage(props.page)
+    if (token !== renderToken) return
   } catch (err) {
     if (token !== renderToken) return
+    scoreLoaded = false
     status.value = 'error'
     errorMessage.value = err instanceof Error ? err.message : '악보를 불러오지 못했습니다.'
     console.error('[VerovioScore]', err)
@@ -251,15 +363,28 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.src, props.assetId, props.compact, props.scoreStyle] as const,
-  () => {
+  () => [props.src ?? '', props.assetId ?? '', props.compact, styleRenderKey(props.scoreStyle)] as const,
+  (next, prev) => {
+    // 마운트 직후 중복 호출 방지 (onMounted에서 이미 render)
+    if (!prev) return
+    if (next[0] === prev[0] && next[1] === prev[1] && next[2] === prev[2] && next[3] === prev[3]) {
+      return
+    }
     void renderScore()
   },
-  { deep: true },
+)
+
+watch(
+  () => props.page,
+  (page) => {
+    if (status.value !== 'ready' || !scoreLoaded) return
+    void paintPage(page)
+  },
 )
 
 onBeforeUnmount(() => {
   renderToken += 1
+  scoreLoaded = false
   resizeObserver?.disconnect()
   resizeObserver = null
   if (host.value) host.value.innerHTML = ''

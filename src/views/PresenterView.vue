@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import SlideCanvas from '../components/SlideCanvas.vue'
+import { styleForSlide } from '../lib/scoreStyle'
 import { useMassStore } from '../stores/mass'
 
 const route = useRoute()
@@ -17,10 +18,54 @@ const showHud = ref(false)
 
 const slide = computed(() => mass.value?.slides[index.value])
 const total = computed(() => mass.value?.slides.length ?? 0)
+const slideScoreStyle = computed(() =>
+  styleForSlide(slide.value?.scoreStyle, mass.value?.scoreStyle),
+)
+
+const scorePage = ref(1)
+const scorePageCount = ref(1)
+/** 이전 슬라이드로 돌아갈 때 악보 마지막 페이지로 */
+let preferLastScorePage = false
+
+const hasScoreXml = computed(() =>
+  Boolean(slide.value?.mode === 'hymn-score' && (slide.value.hymn?.musicXmlAssetId || slide.value.hymn?.musicXmlUrl)),
+)
+
+watch(index, () => {
+  scorePage.value = preferLastScorePage ? 9999 : 1
+  scorePageCount.value = 1
+})
+
+function onScorePageCount(count: number) {
+  const next = Math.max(1, count)
+  if (scorePageCount.value !== next) scorePageCount.value = next
+  if (preferLastScorePage) {
+    scorePage.value = scorePageCount.value
+    preferLastScorePage = false
+  } else {
+    const clamped = Math.min(Math.max(scorePage.value, 1), scorePageCount.value)
+    if (scorePage.value !== clamped) scorePage.value = clamped
+  }
+}
 
 function go(delta: number) {
   if (!mass.value) return
-  index.value = Math.min(Math.max(index.value + delta, 0), total.value - 1)
+
+  if (hasScoreXml.value && scorePageCount.value > 1) {
+    if (delta > 0 && scorePage.value < scorePageCount.value) {
+      scorePage.value += 1
+      return
+    }
+    if (delta < 0 && scorePage.value > 1) {
+      scorePage.value -= 1
+      return
+    }
+  }
+
+  const next = index.value + delta
+  if (next < 0 || next >= total.value) return
+  preferLastScorePage = delta < 0
+  index.value = next
 }
 
 function goEdit() {
@@ -36,13 +81,15 @@ function onKey(e: KeyboardEvent) {
     e.preventDefault()
     go(-1)
   } else if (e.key === 'Home') {
+    preferLastScorePage = false
     index.value = 0
+    scorePage.value = 1
   } else if (e.key === 'End' && total.value) {
+    preferLastScorePage = true
     index.value = total.value - 1
   } else if (e.key === 'Escape') {
     showHud.value = !showHud.value
   } else if ((e.key === 'e' || e.key === 'E') && showHud.value) {
-    // HUD가 열린 상태에서만 — 미사 중 실수 입력 방지
     e.preventDefault()
     goEdit()
   }
@@ -55,6 +102,14 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
 })
+
+const progressLabel = computed(() => {
+  const base = `${index.value + 1} / ${total.value}`
+  if (hasScoreXml.value && scorePageCount.value > 1) {
+    return `${base} · 악보 ${scorePage.value}/${scorePageCount.value}`
+  }
+  return base
+})
 </script>
 
 <template>
@@ -63,9 +118,12 @@ onUnmounted(() => {
       <SlideCanvas
         :slide="slide"
         :score-theme="mass.scoreTheme ?? 'dark'"
-        :score-style="mass.scoreStyle"
+        :score-style="slideScoreStyle"
+        :score-page="scorePage"
         presenting
         class="full"
+        @update:score-page="scorePage = $event"
+        @score-page-count="onScorePageCount"
       />
 
       <div v-show="showHud" class="hud" @click.stop>
@@ -73,15 +131,13 @@ onUnmounted(() => {
           편집으로
           <kbd>E</kbd>
         </button>
-        <p class="progress">{{ index + 1 }} / {{ total }} · {{ mass.title }}</p>
+        <p class="progress">{{ progressLabel }} · {{ mass.title }}</p>
         <div class="nav">
-          <button type="button" class="btn ghost" :disabled="index === 0" @click="go(-1)">이전</button>
-          <button type="button" class="btn primary" :disabled="index >= total - 1" @click="go(1)">
-            다음
-          </button>
+          <button type="button" class="btn ghost" @click="go(-1)">이전</button>
+          <button type="button" class="btn primary" @click="go(1)">다음</button>
         </div>
       </div>
-      <p v-show="showHud" class="hint">← → / Space · Esc로 조작 UI 닫기</p>
+      <p v-show="showHud" class="hint">← → / Space · 악보는 페이지 먼저 · Esc로 조작 UI 닫기</p>
     </template>
 
     <div v-else class="missing">

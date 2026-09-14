@@ -35,10 +35,11 @@ export type ScoreFontId =
 export type ScoreStaffFilter = 'all' | 'treble'
 
 /**
- * OSMD 악보 색
- * - musicColor: 코드 + 오선·음표 (1·2)
- * - lyricsColor: 주 가사 + 보조/2절 가사 (3·4)
+ * 악보 표시 스타일 (미사 기본값 + 슬라이드별 오버라이드)
+ * - musicColor: 코드 + 오선·음표
+ * - lyricsColor: 주 가사 + 보조/2절 가사
  * - chordColor / secondaryLyricsColor: 선택적 세부 지정
+ * - spacing*: Verovio 가로 간격 (시가 대비·전체 밀도)
  */
 export interface ScoreStyle {
   palette?: ScorePaletteId
@@ -48,9 +49,23 @@ export interface ScoreStyle {
   staffFilter?: ScoreStaffFilter
   /**
    * 가사 크기 배율 (1 = 기본). 대략 0.8~1.8
-   * OSMD LyricsHeight에 곱해집니다.
    */
   lyricsScale?: number
+  /**
+   * Verovio spacingNonLinear (0~1).
+   * 1에 가까울수록 시가 그대로 비례, 낮을수록 긴·짧은 음 칸 차이 완화.
+   */
+  spacingNonLinear?: number
+  /**
+   * Verovio spacingLinear (0~1).
+   * 높을수록 전체 가로로 더 넓게.
+   */
+  spacingLinear?: number
+  /**
+   * 한 화면에 보일 시스템(줄) 수. 기본 2.
+   * MusicXML에 줄바꿈이 있을 때만 페이지로 나뉩니다.
+   */
+  systemsPerPage?: number
   /** 오선·음표·쉼표 색 (#rrggbb) */
   musicColor?: string
   /** 코드(화성) 색 — 없으면 musicColor */
@@ -78,6 +93,8 @@ export interface Slide {
   label: string
   body?: string
   hymn?: HymnRef
+  /** 악보 슬라이드별 스타일 — 없으면 mass.scoreStyle 사용 */
+  scoreStyle?: ScoreStyle
   imageAssetId?: string
   imageFileName?: string
   imageUrl?: string

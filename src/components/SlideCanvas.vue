@@ -15,13 +15,21 @@ const props = withDefaults(
     scoreTheme?: ScoreTheme
     scoreStyle?: ScoreStyle | null
     presenting?: boolean
+    /** 악보 Verovio 페이지 (1-based) */
+    scorePage?: number
   }>(),
   {
     compact: false,
     scoreTheme: 'dark',
     presenting: false,
+    scorePage: 1,
   },
 )
+
+const emit = defineEmits<{
+  'update:scorePage': [page: number]
+  scorePageCount: [count: number]
+}>()
 
 const imageAsset = useAssetObjectUrl(computed(() => props.slide.imageAssetId))
 const scoreImageAsset = useAssetObjectUrl(computed(() => props.slide.hymn?.scoreAssetId))
@@ -104,6 +112,9 @@ const effectiveTheme = computed(() => {
           :src="slide.hymn?.musicXmlUrl"
           :score-style="scoreStyle"
           :compact="compact"
+          :page="scorePage"
+          @update:page="emit('update:scorePage', $event)"
+          @page-count="emit('scorePageCount', $event)"
         />
         <SlideImage
           v-else-if="scoreImageSrc || scoreImageAsset.loading.value"
@@ -358,10 +369,19 @@ const effectiveTheme = computed(() => {
   justify-content: flex-start;
   align-items: stretch;
   text-align: left;
+  padding: clamp(0.55rem, 1.6vw, 1.1rem);
 }
 
 .mode-hymn-score.presenting {
-  padding: clamp(0.75rem, 2.5vw, 1.5rem);
+  padding: clamp(0.35rem, 1.2vw, 0.75rem);
+}
+
+.mode-hymn-score .score-header {
+  margin-bottom: 0.25rem;
+}
+
+.mode-hymn-score.presenting .score-header {
+  margin-bottom: 0.15rem;
 }
 
 .sr-only {
