@@ -71,6 +71,33 @@ export const SCORE_FONTS: ScoreFont[] = [
     secondaryWeight: '400',
     chordWeight: '300',
   },
+  {
+    id: 'shilla',
+    label: '신라문화체',
+    hint: '고전체 · Medium/Bold',
+    family: '"Shilla", "Apple SD Gothic Neo", serif',
+    lyricsWeight: '700',
+    secondaryWeight: '500',
+    chordWeight: '500',
+  },
+  {
+    id: 'sejong',
+    label: '세종학당체',
+    hint: '손글씨 바탕 · Regular/Bold',
+    family: '"KingSejongInstitute", "Apple SD Gothic Neo", serif',
+    lyricsWeight: '700',
+    secondaryWeight: '400',
+    chordWeight: '400',
+  },
+  {
+    id: 'gangwon',
+    label: '강원교육모두체',
+    hint: '손글씨 명조 · Light/Bold',
+    family: '"GangwonEducationModuche", "Apple SD Gothic Neo", serif',
+    lyricsWeight: '700',
+    secondaryWeight: '300',
+    chordWeight: '300',
+  },
 ]
 
 export const DEFAULT_SCORE_FONT_ID: ScoreFontId = 'pretendard'

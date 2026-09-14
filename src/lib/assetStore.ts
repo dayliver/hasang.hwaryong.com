@@ -69,6 +69,16 @@ export async function deleteAsset(id: string): Promise<void> {
   }
 }
 
+export async function listAllAssets(): Promise<AssetRecord[]> {
+  const db = await openDb()
+  try {
+    const tx = db.transaction(STORE, 'readonly')
+    return await reqToPromise(tx.objectStore(STORE).getAll())
+  } finally {
+    db.close()
+  }
+}
+
 const MUSICXML_EXT = /\.(musicxml|xml|mxl)$/i
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg)$/i
 

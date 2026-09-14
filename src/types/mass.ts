@@ -30,6 +30,9 @@ export type ScoreFontId =
   | 'nps'
   | 'kimjungchul'
   | 'gapyeong'
+  | 'shilla'
+  | 'sejong'
+  | 'gangwon'
 
 /** 4성부 등에서 표시할 성부 범위 */
 export type ScoreStaffFilter = 'all' | 'treble'

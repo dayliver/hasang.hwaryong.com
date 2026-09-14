@@ -119,7 +119,7 @@ export function useMassStore() {
     if (!mass) return
     const idx = mass.slides.findIndex((s) => s.id === slideId)
     if (idx < 0) return
-    const copy = structuredClone(mass.slides[idx]!) as Slide
+    const copy = JSON.parse(JSON.stringify(mass.slides[idx])) as Slide
     copy.id = newSlideId()
     copy.label = `${copy.label} 복사`
     mass.slides.splice(idx + 1, 0, copy)
@@ -217,6 +217,32 @@ export function useMassStore() {
     state.masses = cloneMasses()
   }
 
+  /** 브라우저에 사용자가 저장한 미사가 있는지 (샘플만이면 false) */
+  function hasPersistedMasses(): boolean {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return false
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) && parsed.length > 0
+    } catch {
+      return false
+    }
+  }
+
+  function replaceAllMasses(masses: MassSession[]) {
+    state.masses = JSON.parse(JSON.stringify(masses)) as MassSession[]
+  }
+
+  /** 같은 id면 교체, 없으면 추가 */
+  function upsertMasses(masses: MassSession[]) {
+    for (const incoming of masses) {
+      const copy = JSON.parse(JSON.stringify(incoming)) as MassSession
+      const idx = state.masses.findIndex((m) => m.id === copy.id)
+      if (idx >= 0) state.masses[idx] = copy
+      else state.masses.push(copy)
+    }
+  }
+
   return {
     list,
     getById,
@@ -229,5 +255,8 @@ export function useMassStore() {
     updateMass,
     replaceSlideAsset,
     reset,
+    hasPersistedMasses,
+    replaceAllMasses,
+    upsertMasses,
   }
 }

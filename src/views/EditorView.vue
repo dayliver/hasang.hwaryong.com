@@ -5,7 +5,7 @@ import AppHeader from '../components/AppHeader.vue'
 import FileDropField from '../components/FileDropField.vue'
 import SlideCanvas from '../components/SlideCanvas.vue'
 import { useMassStore } from '../stores/mass'
-import { SLIDE_MODE_LABEL, type HymnRef, type ScoreFontId, type ScorePaletteId, type ScoreStaffFilter, type ScoreStyle, type SlideMode } from '../types/mass'
+import { SLIDE_MODE_LABEL, type HymnRef, type MassKind, type ScoreFontId, type ScorePaletteId, type ScoreStaffFilter, type ScoreStyle, type SlideMode } from '../types/mass'
 import {
   SCORE_PALETTES,
   cloneResolvedScoreStyle,
@@ -39,6 +39,38 @@ const selectedIndex = computed(() =>
 )
 
 const modes = Object.entries(SLIDE_MODE_LABEL) as [SlideMode, string][]
+
+const MASS_KINDS: MassKind[] = [
+  '주일미사',
+  '평일미사',
+  '특전미사',
+  '혼인미사',
+  '장례미사',
+  '떼제미사',
+  '기타',
+]
+
+function patchMassMeta(partial: {
+  title?: string
+  kind?: MassKind
+  scheduledAt?: string
+  locationNote?: string
+}) {
+  store.updateMass(massId.value, partial)
+}
+
+/** datetime-local 입력용 (로컬 시각, 초 생략) */
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 16)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function fromDatetimeLocalValue(value: string): string {
+  if (!value) return new Date().toISOString().slice(0, 19)
+  return value.length === 16 ? `${value}:00` : value.slice(0, 19)
+}
 
 function select(id: string) {
   selectedId.value = id
@@ -157,13 +189,6 @@ function patchHymn(partial: Partial<HymnRef>) {
     },
   })
 }
-
-function formatWhen(iso: string) {
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'full',
-    timeStyle: 'short',
-  }).format(new Date(iso))
-}
 </script>
 
 <template>
@@ -173,10 +198,56 @@ function formatWhen(iso: string) {
     <main v-if="mass" class="editor">
       <aside class="rail">
         <div class="rail-head">
-          <div>
-            <p class="eyebrow">{{ mass.kind }}</p>
-            <h1>{{ mass.title }}</h1>
-            <p class="when">{{ formatWhen(mass.scheduledAt) }}</p>
+          <div class="mass-meta">
+            <p class="style-caption">미사 정보</p>
+            <label class="meta-field">
+              <span>이름</span>
+              <input
+                :value="mass.title"
+                @input="
+                  patchMassMeta({ title: ($event.target as HTMLInputElement).value })
+                "
+              />
+            </label>
+            <label class="meta-field">
+              <span>종류</span>
+              <select
+                :value="mass.kind"
+                @change="
+                  patchMassMeta({
+                    kind: ($event.target as HTMLSelectElement).value as MassKind,
+                  })
+                "
+              >
+                <option v-for="k in MASS_KINDS" :key="k" :value="k">{{ k }}</option>
+              </select>
+            </label>
+            <label class="meta-field">
+              <span>날짜 · 시간</span>
+              <input
+                type="datetime-local"
+                :value="toDatetimeLocalValue(mass.scheduledAt)"
+                @change="
+                  patchMassMeta({
+                    scheduledAt: fromDatetimeLocalValue(
+                      ($event.target as HTMLInputElement).value,
+                    ),
+                  })
+                "
+              />
+            </label>
+            <label class="meta-field">
+              <span>장소 메모</span>
+              <input
+                :value="mass.locationNote ?? ''"
+                placeholder="본당 · 어두운 조명"
+                @input="
+                  patchMassMeta({
+                    locationNote: ($event.target as HTMLInputElement).value,
+                  })
+                "
+              />
+            </label>
           </div>
           <div class="rail-actions">
             <div class="style-panel" :class="{ disabled: !canEditScoreStyle }">
@@ -602,6 +673,45 @@ function formatWhen(iso: string) {
   flex-direction: column;
   gap: 0.85rem;
   padding: 0 0.35rem;
+}
+
+.mass-meta {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--surface);
+}
+
+.meta-field {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.meta-field span {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.meta-field input,
+.meta-field select {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.meta-field input[type='datetime-local'] {
+  font-variant-numeric: tabular-nums;
+  min-height: 2.1rem;
 }
 
 .rail-actions {
