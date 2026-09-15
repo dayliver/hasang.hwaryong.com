@@ -135,6 +135,8 @@ function onKey(e: KeyboardEvent) {
     preferLastScorePage = true
     index.value = total.value - 1
   } else if (e.key === 'Escape') {
+    // Keyboard Lock이 켜진 환경에서는 preventDefault로 전체화면 해제를 막음
+    e.preventDefault()
     showHud.value = !showHud.value
   } else if ((e.key === 'e' || e.key === 'E') && showHud.value) {
     e.preventDefault()

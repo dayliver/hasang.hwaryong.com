@@ -51,7 +51,13 @@ export interface ScoreStyle {
   /** all=전체, treble=윗줄(트레블)만 — 베이스/아랫줄 숨김 */
   staffFilter?: ScoreStaffFilter
   /**
-   * 가사 크기 배율 (1 = 기본). 대략 0.8~1.8
+   * 제목(pgHead) 크기 배율. 기본 1.4 (기존 Verovio 제목 보정).
+   * 대략 0.8~4
+   */
+  titleScale?: number
+  /**
+   * 가사 크기 배율 (1 = 기본). 대략 0.8~4
+   * Verovio lyricSize 상한(8)을 넘는 구간은 SVG에서 추가 확대합니다.
    */
   lyricsScale?: number
   /**

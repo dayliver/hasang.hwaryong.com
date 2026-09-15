@@ -7,6 +7,7 @@ import {
   clampSpacingLinear,
   clampSpacingNonLinear,
   clampSystemsPerPage,
+  clampTitleScale,
   styleForSlide,
 } from './scoreStyle'
 import { getVerovioToolkit, isZipBuffer, meiHideLowerStaves } from './verovioToolkit'
@@ -45,6 +46,7 @@ export function scoreStyleKey(style?: ScoreStyle | null): string {
     style.palette ?? '',
     style.fontId ?? '',
     style.staffFilter ?? '',
+    style.titleScale ?? '',
     style.lyricsScale ?? '',
     style.spacingNonLinear ?? '',
     style.spacingLinear ?? '',
@@ -83,8 +85,16 @@ function hasForcedSystemBreaks(source: string): boolean {
 
 function verovioLyricSize(scale: number): number {
   const s = clampLyricsScale(scale)
-  const t = (s - 0.8) / (1.8 - 0.8)
+  // Verovio lyricSize는 2~8. UI 0.8~1.8을 그 구간에 매핑하고, 그 이상은 SVG 추가 확대.
+  const t = Math.min(1, Math.max(0, (Math.min(s, 1.8) - 0.8) / (1.8 - 0.8)))
   return Math.round((2 + t * 6) * 100) / 100
+}
+
+/** lyricSize 상한 이후(>180%) 가사를 SVG에서 더 키울 배율 */
+export function lyricSvgExtraScale(scale: number | undefined | null): number {
+  const s = clampLyricsScale(scale)
+  if (s <= 1.8) return 1
+  return Math.round((s / 1.8) * 1000) / 1000
 }
 
 export function buildVerovioOptions(
@@ -185,6 +195,13 @@ export function applyThemeToSvgRoot(root: HTMLElement, style?: ScoreStyle | null
       font-family: ${font.family} !important;
       font-weight: ${font.lyricsWeight} !important;
     }
+    /* 음표와 겹칠 때 가사 우선 (Chromium 등 SVG z-index 지원) */
+    g.verse, g.syl {
+      z-index: 20;
+    }
+    g.note, g.chord, g.rest, g.beam, g.stem, g.staff, g.clef, g.tuplet {
+      z-index: 1;
+    }
     .harm text, .harm, .fb {
       fill: ${c.chord} !important;
       font-family: ${font.family} !important;
@@ -201,7 +218,7 @@ export function applyThemeToSvgRoot(root: HTMLElement, style?: ScoreStyle | null
   if (svg) svg.prepend(el)
   else root.prepend(el)
 
-  const titleScale = 1.4
+  const titleScale = clampTitleScale(style?.titleScale)
   root.querySelectorAll('.pgHead [font-size]').forEach((node) => {
     const raw = node.getAttribute('font-size')
     if (!raw) return
@@ -210,6 +227,100 @@ export function applyThemeToSvgRoot(root: HTMLElement, style?: ScoreStyle | null
     const unit = raw.replace(/[\d.+-eE]/g, '') || 'px'
     node.setAttribute('font-size', `${n * titleScale}${unit}`)
   })
+
+  // Verovio lyricSize 상한(8)을 넘는 UI 배율은 가사 글자만 추가 확대
+  const lyricExtra = lyricSvgExtraScale(style?.lyricsScale)
+  if (lyricExtra > 1) {
+    root
+      .querySelectorAll('.verse [font-size], .syl [font-size], text.syl[font-size], .verse text[font-size]')
+      .forEach((node) => {
+        const raw = node.getAttribute('font-size')
+        if (!raw) return
+        const n = Number.parseFloat(raw)
+        if (!Number.isFinite(n) || n <= 0) return
+        const unit = raw.replace(/[\d.+-eE]/g, '') || 'px'
+        node.setAttribute('font-size', `${n * lyricExtra}${unit}`)
+      })
+  }
+
+  raiseLyricsPaintOrder(root)
+}
+
+/**
+ * 가사(verse)를 SVG 맨 앞 레이어로 옮긴다.
+ * Verovio는 verse를 note 안에 두어 이후 음표가 가사를 덮으므로,
+ * getCTM으로 화면 좌표를 보존한 채 최상단으로 재배치한다.
+ */
+function raiseLyricsPaintOrder(root: HTMLElement) {
+  const svg = root.querySelector('svg')
+  if (!svg) return
+
+  const run = () => {
+    const isLyricGroup = (el: Element) => {
+      const cls = el.getAttribute('class') ?? ''
+      return /(^|\s)(verse|syl)(\s|$)/.test(cls)
+    }
+
+    // verse가 syl을 감싸므로 최외곽 verse만 (없으면 최외곽 syl)
+    const verses = [...svg.querySelectorAll('g.verse')].filter((el) => {
+      let p: Element | null = el.parentElement
+      while (p && p !== svg) {
+        if (isLyricGroup(p)) return false
+        p = p.parentElement
+      }
+      return true
+    })
+    const targets =
+      verses.length > 0
+        ? verses
+        : [...svg.querySelectorAll('g.syl')].filter((el) => {
+            let p: Element | null = el.parentElement
+            while (p && p !== svg) {
+              if (isLyricGroup(p)) return false
+              p = p.parentElement
+            }
+            return true
+          })
+
+    if (!targets.length) return
+
+    const layer = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    layer.setAttribute('class', 'lyrics-front')
+
+    for (const el of targets) {
+      if (!(el instanceof SVGGraphicsElement)) continue
+      // getCTM: 현재 로컬 좌표 → SVG 뷰포트. 부모를 svg로 바꿔도 위치가 같도록 bake.
+      const ctm = el.getCTM()
+      if (ctm) {
+        el.setAttribute(
+          'transform',
+          `matrix(${ctm.a},${ctm.b},${ctm.c},${ctm.d},${ctm.e},${ctm.f})`,
+        )
+      }
+      layer.appendChild(el)
+    }
+
+    svg.appendChild(layer)
+  }
+
+  if (root.isConnected) {
+    run()
+    return
+  }
+
+  // 분리된 트리에서는 getCTM이 실패하므로 잠깐 붙인다
+  const host = document.createElement('div')
+  host.setAttribute('aria-hidden', 'true')
+  host.style.cssText =
+    'position:fixed;left:0;top:0;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none'
+  document.body.appendChild(host)
+  host.appendChild(root)
+  try {
+    run()
+  } finally {
+    if (host.contains(root)) host.removeChild(root)
+    host.remove()
+  }
 }
 
 function themeSvgHtml(svgHtml: string, style?: ScoreStyle | null): string {

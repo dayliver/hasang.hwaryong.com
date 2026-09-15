@@ -122,7 +122,13 @@ export function colorsForStyle(style?: ScoreStyle | null): ResolvedScoreColors {
 
 export function clampLyricsScale(value: number | undefined | null): number {
   const n = typeof value === 'number' && Number.isFinite(value) ? value : 1.25
-  return Math.min(1.8, Math.max(0.8, Math.round(n * 20) / 20))
+  return Math.min(4, Math.max(0.8, Math.round(n * 20) / 20))
+}
+
+/** 기존 제목 보정(1.4)을 기본값으로 유지 */
+export function clampTitleScale(value: number | undefined | null): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : 1.4
+  return Math.min(4, Math.max(0.8, Math.round(n * 20) / 20))
 }
 
 /** Verovio 기본 0.6 근처 — 가사 가독용으로 살짝 완화한 기본값 */
@@ -154,6 +160,7 @@ export function resolveScoreStyle(style?: ScoreStyle | null): Required<ScoreStyl
     palette: c.paletteId,
     fontId,
     staffFilter: style?.staffFilter === 'treble' ? 'treble' : 'all',
+    titleScale: clampTitleScale(style?.titleScale),
     lyricsScale: clampLyricsScale(style?.lyricsScale),
     spacingNonLinear: clampSpacingNonLinear(style?.spacingNonLinear),
     spacingLinear: clampSpacingLinear(style?.spacingLinear),

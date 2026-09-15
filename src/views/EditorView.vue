@@ -139,7 +139,6 @@ function patchScoreStyle(partial: Partial<ScoreStyle>) {
 const scoreStyleResolved = computed(() =>
   styleForSlide(selected.value?.scoreStyle, mass.value?.scoreStyle),
 )
-const canEditScoreStyle = computed(() => selected.value?.mode === 'hymn-score')
 const showDetailColors = ref(false)
 
 const scorePage = ref(1)
@@ -258,149 +257,6 @@ function patchHymn(partial: Partial<HymnRef>) {
             </label>
           </div>
           <div class="rail-actions">
-            <div class="style-panel" :class="{ disabled: !canEditScoreStyle }">
-              <p class="style-caption">
-                {{ canEditScoreStyle ? '이 악보 스타일' : '악보 스타일' }}
-              </p>
-              <p v-if="!canEditScoreStyle" class="style-hint">
-                악보 슬라이드를 선택하면 글씨·색을 각각 조절할 수 있습니다.
-              </p>
-              <fieldset :disabled="!canEditScoreStyle" class="style-fields">
-              <div class="palette-row" role="group" aria-label="악보 팔레트">
-                <button
-                  v-for="p in SCORE_PALETTES"
-                  :key="p.id"
-                  type="button"
-                  class="palette-btn"
-                  :class="{ active: scoreStyleResolved.palette === p.id }"
-                  :title="p.hint"
-                  @click="setPalette(p.id)"
-                >
-                  <span
-                    class="swatch"
-                    :style="{ background: `linear-gradient(135deg, ${p.music}, ${p.lyrics})` }"
-                  />
-                  {{ p.label }}
-                </button>
-              </div>
-
-              <label class="font-row">
-                <span>
-                  <strong>가사 폰트</strong>
-                  <em>코드 · 가사</em>
-                </span>
-                <select
-                  :value="scoreStyleResolved.fontId"
-                  @change="setFont(($event.target as HTMLSelectElement).value as ScoreFontId)"
-                >
-                  <option v-for="f in SCORE_FONTS" :key="f.id" :value="f.id" :title="f.hint">
-                    {{ f.label }}
-                  </option>
-                </select>
-              </label>
-
-              <label class="font-row">
-                <span>
-                  <strong>성부</strong>
-                  <em>4성부 표시</em>
-                </span>
-                <select
-                  :value="scoreStyleResolved.staffFilter"
-                  @change="
-                    setStaffFilter(($event.target as HTMLSelectElement).value as ScoreStaffFilter)
-                  "
-                >
-                  <option value="all">전체 (트레블+베이스)</option>
-                  <option value="treble">트레블만 (윗줄)</option>
-                </select>
-              </label>
-
-              <label class="opacity-row">
-                <span class="scale-label">
-                  <strong>가사 크기</strong>
-                  <em>{{ Math.round(scoreStyleResolved.lyricsScale * 100) }}%</em>
-                </span>
-                <input
-                  type="range"
-                  min="0.8"
-                  max="1.8"
-                  step="0.05"
-                  :value="scoreStyleResolved.lyricsScale"
-                  @input="
-                    patchScoreStyle({
-                      lyricsScale: Number(($event.target as HTMLInputElement).value),
-                    })
-                  "
-                />
-              </label>
-
-              <label class="color-row">
-                <span>
-                  <strong>악보 세트</strong>
-                  <em>코드 · 오선 · 음표</em>
-                </span>
-                <input
-                  type="color"
-                  :value="scoreStyleResolved.musicColor"
-                  @input="
-                    patchScoreStyle({
-                      musicColor: ($event.target as HTMLInputElement).value,
-                      chordColor: ($event.target as HTMLInputElement).value,
-                    })
-                  "
-                />
-              </label>
-              <label class="color-row">
-                <span>
-                  <strong>가사 세트</strong>
-                  <em>주 가사 · 보조/2절</em>
-                </span>
-                <input
-                  type="color"
-                  :value="scoreStyleResolved.lyricsColor"
-                  @input="
-                    patchScoreStyle({
-                      lyricsColor: ($event.target as HTMLInputElement).value,
-                      secondaryLyricsColor: ($event.target as HTMLInputElement).value,
-                    })
-                  "
-                />
-              </label>
-
-              <button
-                type="button"
-                class="detail-toggle"
-                @click="showDetailColors = !showDetailColors"
-              >
-                {{ showDetailColors ? '세부 색 닫기' : '세부 색 (코드 / 보조 가사)' }}
-              </button>
-              <template v-if="showDetailColors">
-                <label class="color-row">
-                  <span>코드만</span>
-                  <input
-                    type="color"
-                    :value="scoreStyleResolved.chordColor"
-                    @input="
-                      patchScoreStyle({ chordColor: ($event.target as HTMLInputElement).value })
-                    "
-                  />
-                </label>
-                <label class="color-row">
-                  <span>보조·2절 가사만</span>
-                  <input
-                    type="color"
-                    :value="scoreStyleResolved.secondaryLyricsColor"
-                    @input="
-                      patchScoreStyle({
-                        secondaryLyricsColor: ($event.target as HTMLInputElement).value,
-                      })
-                    "
-                  />
-                </label>
-              </template>
-              <p class="style-hint">단색만 사용합니다. 새 악보는 직전 악보 스타일을 그대로 물려받습니다.</p>
-              </fieldset>
-            </div>
             <button type="button" class="btn primary" @click="startSlideshow">슬라이드쇼</button>
           </div>
         </div>
@@ -525,6 +381,162 @@ function patchHymn(partial: Partial<HymnRef>) {
               "
             />
           </label>
+
+          <div v-if="selected.mode === 'hymn-score'" class="style-panel">
+            <p class="style-caption">이 악보 스타일</p>
+            <div class="palette-row" role="group" aria-label="악보 팔레트">
+              <button
+                v-for="p in SCORE_PALETTES"
+                :key="p.id"
+                type="button"
+                class="palette-btn"
+                :class="{ active: scoreStyleResolved.palette === p.id }"
+                :title="p.hint"
+                @click="setPalette(p.id)"
+              >
+                <span
+                  class="swatch"
+                  :style="{ background: `linear-gradient(135deg, ${p.music}, ${p.lyrics})` }"
+                />
+                {{ p.label }}
+              </button>
+            </div>
+
+            <label class="font-row">
+              <span>
+                <strong>가사 폰트</strong>
+                <em>코드 · 가사</em>
+              </span>
+              <select
+                :value="scoreStyleResolved.fontId"
+                @change="setFont(($event.target as HTMLSelectElement).value as ScoreFontId)"
+              >
+                <option v-for="f in SCORE_FONTS" :key="f.id" :value="f.id" :title="f.hint">
+                  {{ f.label }}
+                </option>
+              </select>
+            </label>
+
+            <label class="font-row">
+              <span>
+                <strong>성부</strong>
+                <em>4성부 표시</em>
+              </span>
+              <select
+                :value="scoreStyleResolved.staffFilter"
+                @change="
+                  setStaffFilter(($event.target as HTMLSelectElement).value as ScoreStaffFilter)
+                "
+              >
+                <option value="all">전체 (트레블+베이스)</option>
+                <option value="treble">트레블만 (윗줄)</option>
+              </select>
+            </label>
+
+            <label class="opacity-row">
+              <span class="scale-label">
+                <strong>제목 크기</strong>
+                <em>{{ Math.round(scoreStyleResolved.titleScale * 100) }}%</em>
+              </span>
+              <input
+                type="range"
+                min="0.8"
+                max="4.0"
+                step="0.05"
+                :value="scoreStyleResolved.titleScale"
+                @input="
+                  patchScoreStyle({
+                    titleScale: Number(($event.target as HTMLInputElement).value),
+                  })
+                "
+              />
+            </label>
+
+            <label class="opacity-row">
+              <span class="scale-label">
+                <strong>가사 크기</strong>
+                <em>{{ Math.round(scoreStyleResolved.lyricsScale * 100) }}%</em>
+              </span>
+              <input
+                type="range"
+                min="0.8"
+                max="4.0"
+                step="0.05"
+                :value="scoreStyleResolved.lyricsScale"
+                @input="
+                  patchScoreStyle({
+                    lyricsScale: Number(($event.target as HTMLInputElement).value),
+                  })
+                "
+              />
+            </label>
+
+            <label class="color-row">
+              <span>
+                <strong>악보 세트</strong>
+                <em>코드 · 오선 · 음표</em>
+              </span>
+              <input
+                type="color"
+                :value="scoreStyleResolved.musicColor"
+                @input="
+                  patchScoreStyle({
+                    musicColor: ($event.target as HTMLInputElement).value,
+                    chordColor: ($event.target as HTMLInputElement).value,
+                  })
+                "
+              />
+            </label>
+            <label class="color-row">
+              <span>
+                <strong>가사 세트</strong>
+                <em>주 가사 · 보조/2절</em>
+              </span>
+              <input
+                type="color"
+                :value="scoreStyleResolved.lyricsColor"
+                @input="
+                  patchScoreStyle({
+                    lyricsColor: ($event.target as HTMLInputElement).value,
+                    secondaryLyricsColor: ($event.target as HTMLInputElement).value,
+                  })
+                "
+              />
+            </label>
+
+            <button
+              type="button"
+              class="detail-toggle"
+              @click="showDetailColors = !showDetailColors"
+            >
+              {{ showDetailColors ? '세부 색 닫기' : '세부 색 (코드 / 보조 가사)' }}
+            </button>
+            <template v-if="showDetailColors">
+              <label class="color-row">
+                <span>코드만</span>
+                <input
+                  type="color"
+                  :value="scoreStyleResolved.chordColor"
+                  @input="
+                    patchScoreStyle({ chordColor: ($event.target as HTMLInputElement).value })
+                  "
+                />
+              </label>
+              <label class="color-row">
+                <span>보조·2절 가사만</span>
+                <input
+                  type="color"
+                  :value="scoreStyleResolved.secondaryLyricsColor"
+                  @input="
+                    patchScoreStyle({
+                      secondaryLyricsColor: ($event.target as HTMLInputElement).value,
+                    })
+                  "
+                />
+              </label>
+            </template>
+            <p class="style-hint">단색만 사용합니다. 새 악보는 직전 악보 스타일을 그대로 물려받습니다.</p>
+          </div>
 
           <div v-if="selected.mode === 'hymn-score'" class="spacing-fields">
             <p class="field-caption">음표 간격 · 화면당 줄</p>
@@ -658,13 +670,18 @@ function patchHymn(partial: Partial<HymnRef>) {
 
 <style scoped>
 .page {
-  min-height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .editor {
   display: grid;
   grid-template-columns: minmax(240px, 300px) 1fr;
-  min-height: calc(100vh - 4.5rem);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .rail {
@@ -674,6 +691,9 @@ function patchHymn(partial: Partial<HymnRef>) {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .rail-head {
@@ -730,34 +750,17 @@ function patchHymn(partial: Partial<HymnRef>) {
 
 .style-panel {
   display: grid;
-  gap: 0.45rem;
-  padding: 0.65rem 0.55rem;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 0.55rem;
+  border-radius: 0.5rem;
   background: var(--surface);
-}
-
-.style-panel.disabled {
-  opacity: 0.72;
-}
-
-.style-fields {
-  display: grid;
-  gap: 0.45rem;
-  margin: 0;
-  padding: 0;
-  border: none;
-  min-width: 0;
-}
-
-.style-fields:disabled {
-  pointer-events: none;
 }
 
 .style-caption {
   margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
   color: var(--muted);
   font-weight: 600;
 }
@@ -835,10 +838,10 @@ function patchHymn(partial: Partial<HymnRef>) {
 .font-row select {
   flex: 1;
   min-width: 0;
-  max-width: 11rem;
+  max-width: 16rem;
   font: inherit;
-  font-size: 0.72rem;
-  padding: 0.28rem 0.35rem;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.45rem;
   border: 1px solid var(--line);
   border-radius: 0.3rem;
   background: var(--bg);
@@ -963,9 +966,6 @@ function patchHymn(partial: Partial<HymnRef>) {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
 }
 
 .add-panel {
@@ -1102,6 +1102,8 @@ function patchHymn(partial: Partial<HymnRef>) {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .toolbar {
@@ -1307,13 +1309,26 @@ function patchHymn(partial: Partial<HymnRef>) {
 }
 
 @media (max-width: 900px) {
+  .page {
+    height: auto;
+    overflow: visible;
+  }
+
   .editor {
     grid-template-columns: 1fr;
+    overflow: visible;
+    flex: none;
+    min-height: 0;
   }
 
   .rail {
     border-right: none;
     border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+
+  .workspace {
+    overflow: visible;
   }
 
   .hymn-fields {
