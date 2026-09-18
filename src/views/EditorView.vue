@@ -550,7 +550,7 @@ function patchHymn(partial: Partial<HymnRef>) {
           </div>
 
           <div v-if="selected.mode === 'hymn-score'" class="spacing-fields">
-            <p class="field-caption">음표 간격 · 화면당 줄</p>
+            <p class="field-caption">간격 · 화면당 줄</p>
             <label class="font-row field-select">
               <span>
                 <strong>화면당 줄 수</strong>
@@ -569,6 +569,25 @@ function patchHymn(partial: Partial<HymnRef>) {
                 <option :value="3">3줄</option>
                 <option :value="4">4줄</option>
               </select>
+            </label>
+            <label class="field-slider">
+              <span class="scale-label">
+                <strong>악보–가사 간격</strong>
+                <em>{{ scoreStyleResolved.lyricTopMinMargin.toFixed(1) }}</em>
+              </span>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                step="0.5"
+                :value="scoreStyleResolved.lyricTopMinMargin"
+                @input="
+                  patchScoreStyle({
+                    lyricTopMinMargin: Number(($event.target as HTMLInputElement).value),
+                  })
+                "
+              />
+              <span class="slider-hint">높을수록 오선과 가사 사이 ↑ · 8 초과도 반영</span>
             </label>
             <label class="field-slider">
               <span class="scale-label">

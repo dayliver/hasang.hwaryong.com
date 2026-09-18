@@ -75,6 +75,11 @@ export interface ScoreStyle {
    * MusicXML에 줄바꿈이 있을 때만 페이지로 나뉩니다.
    */
   systemsPerPage?: number
+  /**
+   * 오선(악보)과 가사 사이 여백.
+   * UI 1~20. Verovio lyricTopMinMargin은 최대 8이라, 초과분은 SVG에서 가사를 내려 반영.
+   */
+  lyricTopMinMargin?: number
   /** 오선·음표·쉼표 색 (#rrggbb) */
   musicColor?: string
   /** 코드(화성) 색 — 없으면 musicColor */

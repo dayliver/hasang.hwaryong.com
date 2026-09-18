@@ -153,6 +153,28 @@ export function clampSystemsPerPage(value: number | undefined | null): number {
   return Math.min(4, Math.max(1, n))
 }
 
+/** Verovio 기본 2.0 — 투사용으로 이미 넓혀 둔 기본값 (Verovio 상한 8) */
+export const DEFAULT_LYRIC_TOP_MIN_MARGIN = 8
+/** Verovio lyricTopMinMargin 허용 상한. 초과분은 SVG에서 추가로 내린다. */
+export const VEROVIO_LYRIC_TOP_MIN_MARGIN_MAX = 8
+
+/** UI·저장용 (1~20). Verovio에는 min(value, 8)만 넘긴다. */
+export function clampLyricTopMinMargin(value: number | undefined | null): number {
+  const n =
+    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_LYRIC_TOP_MIN_MARGIN
+  return Math.min(20, Math.max(1, Math.round(n * 2) / 2))
+}
+
+/** setOptions에 넣을 값 — 범위 밖이면 Verovio가 이전 값을 유지하므로 반드시 클램프 */
+export function verovioLyricTopMinMargin(value: number | undefined | null): number {
+  return Math.min(VEROVIO_LYRIC_TOP_MIN_MARGIN_MAX, clampLyricTopMinMargin(value))
+}
+
+/** Verovio 상한을 넘는 추가 간격 (MEI units) */
+export function lyricTopMinMarginExtra(value: number | undefined | null): number {
+  return Math.max(0, clampLyricTopMinMargin(value) - VEROVIO_LYRIC_TOP_MIN_MARGIN_MAX)
+}
+
 export function resolveScoreStyle(style?: ScoreStyle | null): Required<ScoreStyle> {
   const c = colorsForStyle(style)
   const fontId = (style?.fontId ?? DEFAULT_SCORE_FONT_ID) as ScoreFontId
@@ -165,6 +187,7 @@ export function resolveScoreStyle(style?: ScoreStyle | null): Required<ScoreStyl
     spacingNonLinear: clampSpacingNonLinear(style?.spacingNonLinear),
     spacingLinear: clampSpacingLinear(style?.spacingLinear),
     systemsPerPage: clampSystemsPerPage(style?.systemsPerPage),
+    lyricTopMinMargin: clampLyricTopMinMargin(style?.lyricTopMinMargin),
     musicColor: c.music,
     chordColor: c.chord,
     lyricsColor: c.lyrics,

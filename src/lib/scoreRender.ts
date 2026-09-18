@@ -8,7 +8,9 @@ import {
   clampSpacingNonLinear,
   clampSystemsPerPage,
   clampTitleScale,
+  lyricTopMinMarginExtra,
   styleForSlide,
+  verovioLyricTopMinMargin,
 } from './scoreStyle'
 import { getVerovioToolkit, isZipBuffer, meiHideLowerStaves } from './verovioToolkit'
 
@@ -51,6 +53,7 @@ export function scoreStyleKey(style?: ScoreStyle | null): string {
     style.spacingNonLinear ?? '',
     style.spacingLinear ?? '',
     style.systemsPerPage ?? '',
+    style.lyricTopMinMargin ?? '',
     style.musicColor ?? '',
     style.chordColor ?? '',
     style.lyricsColor ?? '',
@@ -120,7 +123,8 @@ export function buildVerovioOptions(
     spacingLinear: clampSpacingLinear(style?.spacingLinear),
     systemMaxPerPage: paginate ? clampSystemsPerPage(style?.systemsPerPage) : 0,
     lyricSize: verovioLyricSize(lyricsScale),
-    lyricTopMinMargin: 8, // 가사 위 여백, 기본값은 1.2
+    // Verovio 상한 8. 초과 시 옵션이 무시되고 이전 값이 남으므로 반드시 클램프.
+    lyricTopMinMargin: verovioLyricTopMinMargin(style?.lyricTopMinMargin),
     spacingSystem: 8, // 기본값은 4
     bottomMarginHeader: compact ? 1.5 : 8.0, // 제목 아래 여백, 기본값은 1.5:2.0
     pageMarginTop: compact ? 56 : 72,
@@ -159,7 +163,11 @@ export async function resolveScorePayload(input: {
   throw new Error('악보 소스가 없습니다.')
 }
 
-export function applyThemeToSvgRoot(root: HTMLElement, style?: ScoreStyle | null): void {
+export function applyThemeToSvgRoot(
+  root: HTMLElement,
+  style?: ScoreStyle | null,
+  compact = false,
+): void {
   const c = colorsForStyle(style)
   const font = getScoreFont(style?.fontId)
   const styleId = 'vrv-theme'
@@ -243,7 +251,65 @@ export function applyThemeToSvgRoot(root: HTMLElement, style?: ScoreStyle | null
       })
   }
 
+  shiftLyricsForExtraGap(root, style, compact)
   raiseLyricsPaintOrder(root)
+}
+
+/**
+ * Verovio lyricTopMinMargin 상한(8)을 넘는 간격은 가사 그룹을 아래로 밀어 반영.
+ * (상한을 넘기면 Verovio가 옵션을 거부하고 이전 값을 유지함)
+ */
+function shiftLyricsForExtraGap(
+  root: HTMLElement,
+  style?: ScoreStyle | null,
+  compact = false,
+): void {
+  const extraMei = lyricTopMinMarginExtra(style?.lyricTopMinMargin)
+  if (extraMei <= 0) return
+  const svg = root.querySelector('svg')
+  if (!svg) return
+
+  // Verovio 내부 좌표: MEI 1 ≈ 74.17 (scale과 무관). viewBox는 scale/1000 비율.
+  const contentPerMei = 74.17
+  const scale = compact ? 36 : 42
+  const dy = extraMei * contentPerMei
+  const vbGrow = extraMei * contentPerMei * (scale / 1000)
+
+  const isLyricGroup = (el: Element) => {
+    const cls = el.getAttribute('class') ?? ''
+    return /(^|\s)(verse|syl)(\s|$)/.test(cls)
+  }
+
+  const verses = [...svg.querySelectorAll('g.verse')].filter((el) => {
+    let p: Element | null = el.parentElement
+    while (p && p !== svg) {
+      if (isLyricGroup(p)) return false
+      p = p.parentElement
+    }
+    return true
+  })
+  const targets =
+    verses.length > 0
+      ? verses
+      : [...svg.querySelectorAll('g.syl')].filter((el) => {
+          let p: Element | null = el.parentElement
+          while (p && p !== svg) {
+            if (isLyricGroup(p)) return false
+            p = p.parentElement
+          }
+          return true
+        })
+
+  for (const el of targets) {
+    const prev = el.getAttribute('transform')?.trim()
+    el.setAttribute('transform', prev ? `${prev} translate(0, ${dy})` : `translate(0, ${dy})`)
+  }
+
+  const vbRaw = svg.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
+  if (vbRaw && vbRaw.length === 4 && vbRaw.every((n) => Number.isFinite(n))) {
+    const [vx, vy, vw, vh] = vbRaw as [number, number, number, number]
+    svg.setAttribute('viewBox', `${vx} ${vy} ${vw} ${vh + vbGrow}`)
+  }
 }
 
 /**
@@ -323,10 +389,10 @@ function raiseLyricsPaintOrder(root: HTMLElement) {
   }
 }
 
-function themeSvgHtml(svgHtml: string, style?: ScoreStyle | null): string {
+function themeSvgHtml(svgHtml: string, style?: ScoreStyle | null, compact = false): string {
   const wrap = document.createElement('div')
   wrap.innerHTML = svgHtml
-  applyThemeToSvgRoot(wrap, style)
+  applyThemeToSvgRoot(wrap, style, compact)
   return wrap.innerHTML
 }
 
@@ -365,7 +431,7 @@ export async function renderScorePages(input: ScoreRenderInput): Promise<ScorePa
     const pageCount = Math.max(1, toolkit.getPageCount())
     const pages: string[] = []
     for (let p = 1; p <= pageCount; p += 1) {
-      pages.push(themeSvgHtml(toolkit.renderToSVG(p), style))
+      pages.push(themeSvgHtml(toolkit.renderToSVG(p), style, compact))
     }
     return { pageCount, pages }
   })
