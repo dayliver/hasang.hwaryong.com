@@ -17,6 +17,8 @@ const props = withDefaults(
     presenting?: boolean
     /** 악보 Verovio 페이지 (1-based) */
     scorePage?: number
+    /** 블랙 화면 우측 상단 다음 슬라이드 미리보기 */
+    nextTitle?: string
   }>(),
   {
     compact: false,
@@ -62,6 +64,7 @@ const effectiveTheme = computed(() => {
   >
     <template v-if="slide.mode === 'black'">
       <span class="sr-only">{{ slide.label || '블랙' }}</span>
+      <p v-if="nextTitle" class="next-peek" aria-hidden="true">{{ nextTitle }}</p>
     </template>
 
     <template v-else-if="slide.mode === 'image'">
@@ -176,6 +179,25 @@ const effectiveTheme = computed(() => {
 .mode-black {
   background: #000 !important;
   padding: 0;
+}
+
+.next-peek {
+  position: absolute;
+  top: clamp(0.55rem, 1.8vw, 1rem);
+  right: clamp(0.65rem, 2vw, 1.15rem);
+  margin: 0;
+  max-width: min(42%, 18rem);
+  font-size: clamp(0.62rem, 1.35vw, 0.78rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  text-align: right;
+  color: rgba(244, 239, 228, 0.22);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
 }
 
 .mode-image {

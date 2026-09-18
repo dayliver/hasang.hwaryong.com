@@ -39,6 +39,16 @@ const selected = computed(() => mass.value?.slides.find((s) => s.id === selected
 const selectedIndex = computed(() =>
   mass.value ? mass.value.slides.findIndex((s) => s.id === selectedId.value) : -1,
 )
+const nextSlideTitle = computed(() => {
+  if (!mass.value || selectedIndex.value < 0) return undefined
+  const next = mass.value.slides[selectedIndex.value + 1]
+  if (!next) return undefined
+  const hymn = [next.hymn?.number, next.hymn?.title].filter(Boolean).join(' ')
+  const customLabel = next.label && next.label !== SLIDE_MODE_LABEL[next.mode]
+  if (hymn && customLabel) return `${next.label} · ${hymn}`
+  if (hymn) return hymn
+  return next.label || undefined
+})
 
 const modes = Object.entries(SLIDE_MODE_LABEL) as [SlideMode, string][]
 
@@ -343,6 +353,7 @@ function patchHymn(partial: Partial<HymnRef>) {
             :score-theme="mass.scoreTheme ?? 'dark'"
             :score-style="scoreStyleResolved"
             :score-page="scorePage"
+            :next-title="nextSlideTitle"
             compact
             @update:score-page="scorePage = $event"
             @score-page-count="onScorePageCount"

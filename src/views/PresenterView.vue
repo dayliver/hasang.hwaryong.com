@@ -5,6 +5,7 @@ import SlideCanvas from '../components/SlideCanvas.vue'
 import { preloadMassScores } from '../lib/scoreRender'
 import { styleForSlide } from '../lib/scoreStyle'
 import { useMassStore } from '../stores/mass'
+import { SLIDE_MODE_LABEL, type Slide } from '../types/mass'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,8 +23,20 @@ const prepareDone = ref(0)
 const prepareTotal = ref(0)
 const prepareLabel = ref('악보 준비 중…')
 
+function nextSlidePeekTitle(slide: Slide | undefined): string | undefined {
+  if (!slide) return undefined
+  const hymn = [slide.hymn?.number, slide.hymn?.title].filter(Boolean).join(' ')
+  const customLabel = slide.label && slide.label !== SLIDE_MODE_LABEL[slide.mode]
+  if (hymn && customLabel) return `${slide.label} · ${hymn}`
+  if (hymn) return hymn
+  return slide.label || undefined
+}
+
 const slide = computed(() => mass.value?.slides[index.value])
 const total = computed(() => mass.value?.slides.length ?? 0)
+const nextSlideTitle = computed(() =>
+  nextSlidePeekTitle(mass.value?.slides[index.value + 1]),
+)
 const slideScoreStyle = computed(() =>
   styleForSlide(slide.value?.scoreStyle, mass.value?.scoreStyle),
 )
@@ -190,6 +203,7 @@ const preparePercent = computed(() => {
         :score-theme="mass.scoreTheme ?? 'dark'"
         :score-style="slideScoreStyle"
         :score-page="scorePage"
+        :next-title="nextSlideTitle"
         presenting
         class="full"
         @update:score-page="scorePage = $event"
